@@ -9,15 +9,23 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@feathersjs/authentication-client": "^5.0.37",
+    "@feathersjs/feathers": "^5.0.37",
+    "@feathersjs/rest-client": "^5.0.37",
+    "@feathersjs/socketio-client": "^5.0.37",
     "@radix-ui/react-label": "^2.1.8",
     "@radix-ui/react-separator": "^1.1.8",
     "@radix-ui/react-slot": "^1.2.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "firebase": "^12.8.0",
     "lucide-react": "^0.563.0",
     "next": "16.1.6",
+    "next-themes": "^0.4.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "socket.io-client": "^4.8.3",
+    "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {

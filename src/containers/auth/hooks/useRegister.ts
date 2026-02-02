@@ -9,7 +9,7 @@ import feathersClient from '@/services/featherClient'
 import { toast } from 'sonner'
 import { auth } from '../services/firebase'
 import { signIn } from '../services/signIn'
-import { InitialData, LoginData } from '../types'
+import { InitialData } from '../types'
 
 export const useRegister = (): {
   data: InitialData
@@ -26,9 +26,14 @@ export const useRegister = (): {
     password: ''
   })
   const [loading, setLoading] = useState<boolean>(false)
-  const updateData = useCallback((dataItem: Partial<LoginData>) => {
+  const updateData = useCallback((dataItem: Partial<InitialData>) => {
     setData((prevData) => ({ ...prevData, ...dataItem }))
   }, [])
+
+  const validateEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return emailRegex.test(email)
+  }
 
   const validatePassword = (password: string) => {
     if (password.length < 8) {
@@ -52,6 +57,8 @@ export const useRegister = (): {
         return 'Too many requests. Please try again later.'
       case 'auth/weak-password':
         return 'Password is too weak.'
+      case 'auth/missing-password':
+        return 'Password is required.'
       default:
         return 'An unexpected error occurred. Please try again.'
     }
@@ -68,6 +75,18 @@ export const useRegister = (): {
         return
       }
 
+      if (!validateEmail(data.email)) {
+        toast.error('Invalid email format.')
+        setLoading(false)
+        return
+      }
+
+      if (data.password.length < 8) {
+        toast.error('Password must be at least 8 characters long.')
+        setLoading(false)
+        return
+      }
+
       try {
         const res = await createUserWithEmailAndPassword(auth, data.email, data.password)
         const firebaseIdToken = await res.user.getIdToken(true)
@@ -80,27 +99,19 @@ export const useRegister = (): {
           },
           strategy: 'firebase'
         })
-        try {
-          await signIn({
-            firstName: data.firstName,
-            lastName: data.lastName,
-            jwt: authResponse.accessToken,
-            feathersId: authResponse.user._id,
-            userMeta: res.user.providerData
-          })
-        } catch (error) {
-          if (isRedirectError(error)) {
-            throw error
-          }
-          throw error
-        }
+
+        await signIn({
+          firstName: data.firstName,
+          lastName: data.lastName,
+          jwt: authResponse.accessToken,
+          feathersId: authResponse.user._id,
+          userMeta: res.user.providerData
+        })
       } catch (err) {
         if (isRedirectError(err)) {
           throw err
         }
         const error = err as { code?: string; message?: string; name?: string }
-        console.log('error', error.name)
-        console.log('error', error.code)
 
         if (error.code || error.name === 'FirebaseError') {
           const message = getFirebaseErrorMessage(error?.code || error?.name || '')

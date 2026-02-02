@@ -1,6 +1,6 @@
-import { apiEndpoints } from '@/config/apiEndpoints'
-import { redirect } from 'next/navigation'
+import { CheckUser } from '@/services/checkUser'
 
-export default function Home() {
-  redirect(apiEndpoints.auth.login)
+export default async function HomePage() {
+  await CheckUser()
+  return null
 }

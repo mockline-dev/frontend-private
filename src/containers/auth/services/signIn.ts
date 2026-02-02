@@ -3,7 +3,7 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 
-import { appPaths } from '@/config/appRoutes'
+import { appRoutes } from '@/config/appRoutes'
 import { UserData } from '../types'
 
 interface SignInRes {
@@ -13,14 +13,21 @@ interface SignInRes {
 export async function signIn(data: UserData): Promise<SignInRes> {
   const { feathersId, firstName, lastName, jwt, userMeta } = data
 
-  ;(await cookies()).set('jwt', jwt || '', {
+  if (!feathersId || !jwt) {
+    return { error: 'Invalid sign in data' }
+  }
+
+  const cookiesStore = await cookies()
+
+  cookiesStore.set('jwt', jwt, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
     maxAge: 24 * 60 * 60, // 24 hours
     path: '/'
   })
-  ;(await cookies()).set(
+
+  cookiesStore.set(
     'currentUser',
     JSON.stringify({
       feathersId,
@@ -37,5 +44,5 @@ export async function signIn(data: UserData): Promise<SignInRes> {
     }
   )
 
-  redirect(appPaths.categories)
+  redirect(appRoutes.home.dashboard)
 }

@@ -17,6 +17,7 @@ export const useLogin = (): {
   login: (e: FormEvent) => Promise<void>
   loginWithGoogle: () => Promise<void>
   loading: boolean
+  googleLoading: boolean
 } => {
   const [errors, setErrors] = useState<CustomError | undefined>()
   const [data, setData] = useState<LoginData>({
@@ -24,6 +25,7 @@ export const useLogin = (): {
     password: ''
   })
   const [loading, setLoading] = useState<boolean>(false)
+  const [googleLoading, setGoogleLoading] = useState<boolean>(false)
 
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -38,7 +40,7 @@ export const useLogin = (): {
     async (e: FormEvent) => {
       e.preventDefault()
 
-      if (loading) return
+      if (loading || googleLoading) return
 
       setLoading(true)
       setErrors(undefined)
@@ -52,29 +54,51 @@ export const useLogin = (): {
         return
       }
 
+      if (!data.password) {
+        setErrors({
+          message: 'Password is required',
+          code: 'auth/missing-password'
+        })
+        setLoading(false)
+        return
+      }
+
       try {
-        const userCredential = await signInWithEmailAndPassword(auth, data.email || '', data.password || '')
+        const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password)
         const idToken = await userCredential.user.getIdToken()
-        const fres = await feathersClient.authenticate({
+        const authResponse = await feathersClient.authenticate({
           strategy: 'firebase',
           accessToken: idToken
         })
 
         await signIn({
-          feathersId: fres.user._id,
-          jwt: fres.accessToken,
+          firstName: authResponse.user.firstName,
+          lastName: authResponse.user.lastName,
+          feathersId: authResponse.user._id,
+          jwt: authResponse.accessToken,
           userMeta: userCredential.user.providerData
         })
       } catch (err: unknown) {
-        toast.error(err instanceof Error ? err.message : 'An unknown error occurred')
+        const error = err as { code?: string; message?: string }
+        const message =
+          error.code === 'auth/invalid-credential'
+            ? 'Invalid email or password'
+            : error.message || 'An unknown error occurred'
+        toast.error(message)
+        setErrors({ message, code: error.code })
       } finally {
         setLoading(false)
       }
     },
-    [data, loading]
+    [data]
   )
 
   const loginWithGoogle = useCallback(async () => {
+    if (loading || googleLoading) return
+
+    setGoogleLoading(true)
+    setErrors(undefined)
+
     try {
       const userCredential = await signInWithPopup(auth, googleProvider)
       const idToken = await userCredential.user.getIdToken()
@@ -95,9 +119,17 @@ export const useLogin = (): {
         jwt: fres.accessToken
       })
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'An unknown error occurred')
+      const error = err as { code?: string; message?: string }
+      const message =
+        error.code === 'auth/popup-closed-by-user'
+          ? 'Google sign-in was cancelled'
+          : error.message || 'An unknown error occurred'
+      toast.error(message)
+      setErrors({ message, code: error.code })
+    } finally {
+      setGoogleLoading(false)
     }
-  }, [])
+  }, [loading, googleLoading])
 
   return {
     data,
@@ -105,6 +137,7 @@ export const useLogin = (): {
     login,
     loginWithGoogle,
     loading,
+    googleLoading,
     errors
   }
 }

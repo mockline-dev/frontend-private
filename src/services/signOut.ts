@@ -1,13 +1,13 @@
-'use server';
+'use server'
 
-import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
 
-import { appPaths } from '@/config/appRoutes';
+import { appRoutes } from '@/config/appRoutes'
 
 export const signOut = async () => {
-    cookies().delete('currentUser');
-    cookies().delete('feathers-jwt');
+  cookies().delete('currentUser')
+  cookies().delete('feathers-jwt')
 
-    redirect(appPaths.signOut);
-};
+  redirect(appRoutes.signOut)
+}

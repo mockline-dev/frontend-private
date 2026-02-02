@@ -1,16 +1,16 @@
-'use server';
+'use server'
 
-import { FC } from 'react';
-import { redirect } from 'next/navigation';
+import { redirect } from 'next/navigation'
+import { FC } from 'react'
 
-import { getCurrentUser } from '@/services/getCurrentUser';
-import { appPaths } from '@/config/appRoutes';
+import { appRoutes } from '@/config/appRoutes'
+import { getCurrentUser } from '@/services/getCurrentUser'
 
 export const CheckUser: FC = async () => {
-    const user = await getCurrentUser();
-    if (user) {
-        redirect(appPaths.categories);
-    } else {
-        redirect(appPaths.signOut);
-    }
-};
+  const user = await getCurrentUser()
+  if (user) {
+    redirect(appRoutes.categories)
+  } else {
+    redirect(appRoutes.signOut)
+  }
+}

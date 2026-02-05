@@ -1,6 +1,5 @@
-import { CheckUser } from '@/services/checkUser'
+import { InitialScreen } from '@/containers/initialScreen/InitialScreen'
 
-export default async function HomePage() {
-  await CheckUser()
-  return null
+export default function HomePage() {
+  return <InitialScreen />
 }

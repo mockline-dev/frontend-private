@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
 import { useState } from 'react'
-import { useLogin } from '../hooks/useLogin'
+import { useLogin } from '@/hooks/auth/useLogin'
 import { useRegister } from '../hooks/useRegister'
 
 export function Signup({ className, ...props }: React.ComponentProps<'form'>) {

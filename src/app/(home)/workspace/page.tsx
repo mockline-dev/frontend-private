@@ -1,10 +1,10 @@
-import { Dashboard } from '@/containers/dashboard/Dashboard'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
+import { Workspace } from '@/containers/workspace/Workspace'
 
-export default function DashboardPage() {
+export default function WorkspacePage() {
   return (
     <ProtectedRoute>
-      <Dashboard />
+      <Workspace />
     </ProtectedRoute>
   )
 }

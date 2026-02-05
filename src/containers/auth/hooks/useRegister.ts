@@ -7,8 +7,8 @@ import { FormEvent, useCallback, useState } from 'react'
 import feathersClient from '@/services/featherClient'
 
 import { toast } from 'sonner'
-import { auth } from '../services/firebase'
-import { signIn } from '../services/signIn'
+import { auth } from '@/services/auth/firebase'
+import { signIn } from '@/services/auth/signIn'
 import { InitialData } from '../types'
 
 export const useRegister = (): {

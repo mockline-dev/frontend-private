@@ -1,10 +1,7 @@
 'use server'
 
 import { cookies } from 'next/headers'
-import { redirect } from 'next/navigation'
-
-import { appRoutes } from '@/config/appRoutes'
-import { UserData } from '../types'
+import { UserData } from '@/types/auth'
 
 interface SignInRes {
   error?: string
@@ -33,7 +30,8 @@ export async function signIn(data: UserData): Promise<SignInRes> {
       feathersId,
       firstName,
       lastName,
-      userMeta
+      userMeta,
+      jwt
     }),
     {
       httpOnly: true,
@@ -44,5 +42,5 @@ export async function signIn(data: UserData): Promise<SignInRes> {
     }
   )
 
-  redirect(appRoutes.home.dashboard)
+  return { error: undefined }
 }

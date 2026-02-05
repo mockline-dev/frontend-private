@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import Link from 'next/link'
 import { useLogin } from '@/hooks/auth/useLogin'
 
-export function Login({ className, ...props }: React.ComponentProps<'div'>) {
+export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) {
   const { login, loginWithGoogle, loading, googleLoading, errors, data, updateData } = useLogin()
   const isLoading = loading || googleLoading
 

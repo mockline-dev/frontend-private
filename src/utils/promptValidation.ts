@@ -1,0 +1,236 @@
+/**
+ * Prompt validation utilities for AI backend generation
+ */
+
+export interface PromptValidationResult {
+  isValid: boolean;
+  confidence: number; // 0-1 score
+  category: 'backend' | 'general' | 'unclear' | 'invalid';
+  suggestedQuestions?: string[];
+  reason?: string;
+  enhancedPrompt?: string;
+}
+
+// Keywords that indicate backend development intent
+const BACKEND_KEYWORDS = [
+  // API related
+  'api', 'endpoint', 'rest', 'graphql', 'webhook', 'route', 'controller',
+  // Database related
+  'database', 'db', 'sql', 'mongodb', 'postgres', 'mysql', 'schema', 'model',
+  // Authentication
+  'auth', 'authentication', 'login', 'signup', 'jwt', 'token', 'session',
+  // Server related
+  'server', 'backend', 'express', 'fastapi', 'django', 'flask', 'node',
+  // Features
+  'crud', 'middleware', 'validation', 'error handling', 'logging',
+  // Architecture
+  'microservice', 'service', 'architecture', 'deployment', 'docker'
+];
+
+// Frameworks and technologies
+const FRAMEWORKS = [
+  'express', 'fastapi', 'django', 'flask', 'nestjs', 'feathersjs', 
+  'spring', 'laravel', 'rails', 'koa', 'hapi'
+];
+
+// Database technologies
+const DATABASES = [
+  'mongodb', 'postgres', 'mysql', 'sqlite', 'redis', 'elasticsearch',
+  'dynamodb', 'firestore', 'supabase', 'prisma', 'sequelize'
+];
+
+// Common non-backend prompts that should be filtered out
+const INVALID_PATTERNS = [
+  /^(hi|hello|hey|test|testing)$/i,
+  /^(what|how|why|when|where)\s*\?*$/i,
+  /^(thanks|thank you|ok|okay)$/i,
+  /^\d+$/,  // Just numbers
+  /^[a-zA-Z]$/,  // Single letters
+];
+
+// Patterns that suggest backend development
+const BACKEND_PATTERNS = [
+  /create.*api/i,
+  /build.*backend/i,
+  /make.*server/i,
+  /add.*endpoint/i,
+  /implement.*auth/i,
+  /setup.*database/i,
+  /generate.*crud/i,
+  /(user|product|order|payment).*management/i,
+  /\b(rest|graphql)\s*api/i,
+];
+
+/**
+ * Validates if a prompt is suitable for backend generation
+ */
+export function validatePrompt(prompt: string): PromptValidationResult {
+  if (!prompt || typeof prompt !== 'string') {
+    return {
+      isValid: false,
+      confidence: 0,
+      category: 'invalid',
+      reason: 'Empty or invalid prompt'
+    };
+  }
+
+  const trimmedPrompt = prompt.trim().toLowerCase();
+  
+  // Check for obviously invalid patterns
+  for (const pattern of INVALID_PATTERNS) {
+    if (pattern.test(trimmedPrompt)) {
+      return {
+        isValid: false,
+        confidence: 0.9,
+        category: 'invalid',
+        reason: 'Prompt appears to be a greeting, test, or too simple',
+        suggestedQuestions: [
+          'What type of backend application would you like to create?',
+          'What features should your API include?',
+          'Which database would you like to use?',
+          'Do you need authentication in your backend?'
+        ]
+      };
+    }
+  }
+
+  // Check for explicit backend patterns
+  for (const pattern of BACKEND_PATTERNS) {
+    if (pattern.test(prompt)) {
+    return {
+      isValid: true,
+      confidence: 0.9,
+      category: 'backend',
+      reason: 'Prompt explicitly mentions backend development',
+      enhancedPrompt: enhancePrompt(prompt)
+    };
+    }
+  }
+
+  // Count backend-related keywords
+  const words = trimmedPrompt.split(/\s+/);
+  let backendScore = 0;
+  let frameworkScore = 0;
+  let databaseScore = 0;
+
+  for (const word of words) {
+    if (BACKEND_KEYWORDS.includes(word)) {
+      backendScore += 1;
+    }
+    if (FRAMEWORKS.includes(word)) {
+      frameworkScore += 2; // Frameworks are strong indicators
+    }
+    if (DATABASES.includes(word)) {
+      databaseScore += 1.5; // Databases are good indicators
+    }
+  }
+
+  const totalScore = backendScore + frameworkScore + databaseScore;
+  const confidence = Math.min(totalScore / words.length, 1);
+
+  // Determine category based on score and length
+  if (confidence >= 0.3 || totalScore >= 2) {
+    return {
+      isValid: true,
+      confidence,
+      category: 'backend',
+      reason: 'Prompt contains backend-related keywords',
+      enhancedPrompt: enhancePrompt(prompt)
+    };
+  }
+
+  // Check if it's a general development request that could be backend
+  const generalDevKeywords = ['app', 'application', 'system', 'platform', 'service'];
+  const hasGeneralDev = generalDevKeywords.some(keyword => trimmedPrompt.includes(keyword));
+  
+  if (hasGeneralDev && words.length >= 3) {
+    return {
+      isValid: true,
+      confidence: 0.4,
+      category: 'general',
+      reason: 'General development request - may need clarification',
+      suggestedQuestions: [
+        'Would you like me to create a backend API for this?',
+        'What specific backend features do you need?',
+        'Should I include database integration?',
+        'Do you need user authentication?'
+      ]
+    };
+  }
+
+  // If prompt is too short or unclear
+  if (words.length < 3) {
+    return {
+      isValid: false,
+      confidence: 0.2,
+      category: 'unclear',
+      reason: 'Prompt is too short or unclear',
+      suggestedQuestions: [
+        'Could you provide more details about what you want to build?',
+        'What type of backend application are you looking for?',
+        'What features should your API include?',
+        'Are you building a web app, mobile app backend, or something else?'
+      ]
+    };
+  }
+
+  // Default case - might be valid but needs clarification
+  return {
+    isValid: false,
+    confidence: 0.3,
+    category: 'unclear',
+    reason: 'Prompt needs more specific backend requirements',
+    suggestedQuestions: [
+      'I couldn\'t identify specific backend requirements in your prompt. Could you be more specific?',
+      'Are you looking to create an API, database, or specific backend functionality?',
+      'What type of application backend do you need?',
+      'Would you like me to suggest some backend features for your project?'
+    ]
+  };
+}
+
+/**
+ * Generates follow-up questions based on a prompt
+ */
+export function generateFollowUpQuestions(prompt: string): string[] {
+  const validation = validatePrompt(prompt);
+  
+  if (validation.suggestedQuestions) {
+    return validation.suggestedQuestions;
+  }
+
+  // Default follow-up questions for valid prompts
+  return [
+    'What database would you prefer to use?',
+    'Do you need user authentication?',
+    'Should I include API documentation?',
+    'What programming language do you prefer?'
+  ];
+}
+
+/**
+ * Enhances a prompt with additional context for better AI generation
+ */
+export function enhancePrompt(prompt: string): string {
+  const validation = validatePrompt(prompt);
+  
+  if (!validation.isValid) {
+    return prompt; // Don't enhance invalid prompts
+  }
+
+  // Add context for better AI generation
+  const enhancedPrompt = `Create a professional backend application based on this request: "${prompt}".
+
+Please include:
+- Clean, well-structured code
+- Proper error handling
+- Input validation
+- Basic security measures
+- Clear API endpoints
+- Database integration where appropriate
+- Comprehensive comments
+
+Generate a complete, production-ready backend with all necessary files.`;
+
+  return enhancedPrompt;
+}

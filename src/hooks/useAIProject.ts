@@ -1,30 +1,25 @@
 'use client'
 
-import { AIProject, aiProjectsService, CreateAIProjectData } from '@/services/api/aiProjects'
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { CreateProjectData, Project, projectsService } from '@/services/api/projects'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
-export function useAIProject(projectId?: string) {
-  const [project, setProject] = useState<AIProject | null>(null)
+export type AIProject = Project
+export type CreateAIProjectData = CreateProjectData
+
+export function useAIProject(projectId?: string, initialProject: Project | null = null) {
+  const [project, setProject] = useState<Project | null>(initialProject)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
-  // Refs to prevent stale closures and multiple calls
-  const currentProjectIdRef = useRef(projectId)
+  const currentProjectIdRef = useRef(projectId || initialProject?._id)
+  const initialProjectIdRef = useRef(initialProject?._id)
   const loadingRef = useRef(false)
-
-  
-  useEffect(() => {
-    if (projectId) {
-      loadProject(projectId)
-    }
-  }, [projectId])
-
   
   useEffect(() => {
     if (!project) return
 
-    const unsubscribePatched = aiProjectsService.onPatched((updatedProject) => {
+    const unsubscribePatched = projectsService.onPatched((updatedProject) => {
       if (updatedProject._id === project._id) {
         setProject(updatedProject)
         
@@ -36,7 +31,7 @@ export function useAIProject(projectId?: string) {
       }
     })
 
-    const unsubscribeUpdated = aiProjectsService.onUpdated((updatedProject) => {
+    const unsubscribeUpdated = projectsService.onUpdated((updatedProject) => {
       if (updatedProject._id === project._id) {
         setProject(updatedProject)
       }
@@ -49,7 +44,6 @@ export function useAIProject(projectId?: string) {
   }, [project])
 
   const loadProject = useCallback(async (id: string) => {
-    // Prevent multiple simultaneous calls
     if (loadingRef.current || !id) return
     
     try {
@@ -57,14 +51,12 @@ export function useAIProject(projectId?: string) {
       setLoading(true)
       setError(null)
       
-      const loadedProject = await aiProjectsService.get(id)
+      const loadedProject = await projectsService.get(id)
       
-      // Only update if we're still on the same project
       if (currentProjectIdRef.current === id) {
         setProject(loadedProject)
       }
     } catch (err) {
-      // Only show error if we're still on the same project
       if (currentProjectIdRef.current === id) {
         console.error('Failed to load project:', err)
         setError('Failed to load project')
@@ -78,22 +70,33 @@ export function useAIProject(projectId?: string) {
     }
   }, [])
 
+  useEffect(() => {
+    currentProjectIdRef.current = projectId
+    if (projectId && projectId !== initialProjectIdRef.current) {
+      loadProject(projectId)
+    }
+  }, [projectId, loadProject])
+
   const createProject = useCallback(async (data: CreateAIProjectData): Promise<AIProject | null> => {
-    // Prevent multiple simultaneous calls
     if (loadingRef.current) return null
-    
+
     try {
       loadingRef.current = true
       setLoading(true)
       setError(null)
-      
-      const newProject = await aiProjectsService.create(data)
+
+      console.log('[DEBUG] Creating project with data:', JSON.stringify(data, null, 2))
+      console.log('[DEBUG] Data keys:', Object.keys(data))
+
+      const newProject = await projectsService.create(data)
+      console.log('[DEBUG] New project:', JSON.stringify(newProject, null, 2))
       setProject(newProject)
       currentProjectIdRef.current = newProject._id
       toast.success('Project creation started!')
       return newProject
     } catch (err) {
-      console.error('Failed to create project:', err)
+      console.error('[DEBUG] Failed to create project:', err)
+      console.error('[DEBUG] Error details:', JSON.stringify(err, null, 2))
       setError('Failed to create project')
       toast.error('Failed to create project')
       return null
@@ -107,7 +110,7 @@ export function useAIProject(projectId?: string) {
     try {
       setLoading(true)
       setError(null)
-      const updatedProject = await aiProjectsService.patch(id, data)
+      const updatedProject = await projectsService.patch(id, data)
       setProject(updatedProject)
       return updatedProject
     } catch (err) {
@@ -124,7 +127,7 @@ export function useAIProject(projectId?: string) {
     try {
       setLoading(true)
       setError(null)
-      await aiProjectsService.remove(id)
+      await projectsService.remove(id)
       setProject(null)
       toast.success('Project deleted successfully')
       return true

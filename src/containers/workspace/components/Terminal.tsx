@@ -49,7 +49,6 @@ export function Terminal({ isOpen, onClose, projectId }: TerminalProps) {
 
   return (
     <div className="fixed bottom-4 right-4 w-[600px] h-[400px] bg-white border border-gray-300 rounded-lg shadow-2xl flex flex-col z-50">
-      {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 bg-gray-50 rounded-t-lg">
         <div className="flex items-center gap-2">
           <TerminalIcon className="w-3.5 h-3.5 text-gray-600" />
@@ -81,7 +80,6 @@ export function Terminal({ isOpen, onClose, projectId }: TerminalProps) {
         </div>
       </div>
 
-      {/* Logs */}
       <div className="flex-1 overflow-y-auto p-3 font-mono text-xs bg-gray-900 relative">
       <Button
             variant="ghost"

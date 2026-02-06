@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { defaultAiModel, getApiUrl } from '@/config/environment';
-import { Message, messagesService } from '@/services/api/messages-new';
+import { messagesService } from '@/services/api/messages-new';
 import { PromptValidationResult, validatePrompt } from '@/utils/promptValidation';
 import { Loader2, Send, Sparkles } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -13,7 +13,7 @@ interface AIAgentProps {
 }
 
 interface StreamMessage {
-  role: 'system' | 'user' | 'assistant'
+  role: 'system' | 'user'
   content: string
 }
 
@@ -26,9 +26,10 @@ const suggestedPrompts = [
 ];
 
 export function AiAgent({ projectId }: AIAgentProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
   const [isStreaming, setIsStreaming] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -41,19 +42,33 @@ export function AiAgent({ projectId }: AIAgentProps) {
     scrollToBottom();
   }, [messages]);
 
-  // Load messages for the project on mount
   useEffect(() => {
-    const loadMessages = async () => {
-      if (!projectId) return;
+    if (!projectId) {
+      setIsInitializing(true);
+      return;
+    }
+
+    const initializeMessages = async () => {
       try {
-        const result = await messagesService.find({ projectId });
-        setMessages(result.data);
+        setIsInitializing(true);
+        
+        // Add welcome message
+        const welcomeMessage = await messagesService.create({
+          projectId: projectId,
+          role: 'system',
+          content: "Hi! I can help you build and improve your backend. What would you like to create?"
+        });
+        
+        setMessages([welcomeMessage]);
       } catch (error) {
-        console.error('Failed to load messages:', error);
+        console.error('Failed to initialize messages:', error);
+        toast.error('Failed to initialize AI chat');
+      } finally {
+        setIsInitializing(false);
       }
     };
 
-    loadMessages();
+    initializeMessages();
   }, [projectId]);
 
   // Listen for real-time message updates
@@ -101,10 +116,10 @@ export function AiAgent({ projectId }: AIAgentProps) {
   };
 
   // Stream AI response
-  const streamAIResponse = async (messages: StreamMessage[], currentProjectId: string) => {
+  const streamAIResponse = async (messages: StreamMessage[], projectId: string) => {
     try {
       setIsStreaming(true);
-
+      
       const response = await fetch(getApiUrl('/api/stream'), {
         method: 'POST',
         headers: {
@@ -122,8 +137,8 @@ export function AiAgent({ projectId }: AIAgentProps) {
 
       // Create initial AI message
       const aiMessage = await messagesService.create({
-        projectId: currentProjectId,
-        role: 'assistant',
+        projectId: projectId,
+        role: 'system',
         content: ''
       });
 
@@ -145,7 +160,7 @@ export function AiAgent({ projectId }: AIAgentProps) {
                 const data = JSON.parse(line);
                 if (data.message?.content) {
                   fullContent += data.message.content;
-
+                  
                   // Update message in real-time
                   await messagesService.patch(aiMessage._id, {
                     content: fullContent
@@ -177,7 +192,7 @@ export function AiAgent({ projectId }: AIAgentProps) {
     try {
       // Create user message
       const userMessage = await messagesService.create({
-        projectId,
+        projectId: projectId,
         role: 'user',
         content: messageContent
       });
@@ -190,19 +205,19 @@ export function AiAgent({ projectId }: AIAgentProps) {
 
       // Validate prompt first
       const validation = await validatePromptWithAI(messageContent);
-
+      
       if (!validation.isValid) {
         // Handle invalid prompts with follow-up questions
-        const followUpMessage = validation.suggestedQuestions
+        const followUpMessage = validation.suggestedQuestions 
           ? validation.suggestedQuestions.join('\n\n')
           : "I couldn't understand your request. Could you provide more details about what you want to build?";
 
         await messagesService.create({
-          projectId,
-          role: 'assistant',
+          projectId: projectId,
+          role: 'system',
           content: followUpMessage
         });
-
+        
         setIsLoading(false);
         return;
       }
@@ -224,7 +239,7 @@ export function AiAgent({ projectId }: AIAgentProps) {
       ];
 
       await streamAIResponse(conversationMessages, projectId);
-
+      
     } catch (error) {
       console.error('Failed to send message:', error);
       toast.error('Failed to get AI response');
@@ -237,6 +252,17 @@ export function AiAgent({ projectId }: AIAgentProps) {
     setInput(prompt);
   };
 
+  if (isInitializing) {
+    return (
+      <div className="h-full flex items-center justify-center bg-white">
+        <div className="text-center">
+          <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-gray-600" />
+          <p className="text-sm text-gray-600">Initializing AI chat...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full flex flex-col bg-white">
       {/* Messages */}
@@ -248,7 +274,7 @@ export function AiAgent({ projectId }: AIAgentProps) {
               message.role === 'user' ? 'justify-end' : 'justify-start'
             }`}
           >
-            {message.role === 'assistant' && (
+            {message.role === 'system' && (
               <div className="w-6 h-6 bg-black rounded-md flex items-center justify-center shrink-0">
                 <Sparkles className="w-3 h-3 text-white" />
               </div>

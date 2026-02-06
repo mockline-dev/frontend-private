@@ -3,6 +3,7 @@
 import { UserMenu } from '@/components/custom/UserMenu';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/providers/AuthProvider';
+import { savePrompt } from '@/utils/promptStorage';
 import { ArrowRight, Sparkles } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -15,7 +16,7 @@ const quickPrompts = [
 ];
 
 export function InitialScreen() {
-  const { isAuthenticated, loading, setSavedPrompt, logout } = useAuth();
+  const { isAuthenticated, loading, logout } = useAuth();
   const router = useRouter();
   const [promptValue, setPromptValue] = useState('');
 
@@ -38,7 +39,9 @@ export function InitialScreen() {
     if (isAuthenticated) {
       router.push(`/workspace?prompt=${encodeURIComponent(prompt)}`);
     } else {
-      setSavedPrompt(prompt);
+      // Save prompt to sessionStorage - best practice for temporary data
+      // Persists across refreshes during session, cleared when browser closes
+      savePrompt(prompt);
       router.push('/auth/login');
     }
   };
@@ -49,9 +52,9 @@ export function InitialScreen() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-blue-100 via-blue-50 to-amber-50 flex items-center justify-center">
+      <div className="min-h-screen bg-linear-to-b from-blue-100 via-blue-50 to-amber-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg flex items-center justify-center mx-auto mb-4">
+          <div className="w-8 h-8 bg-linear-to-br from-violet-500 to-purple-600 rounded-lg flex items-center justify-center mx-auto mb-4">
             <Sparkles className="w-4 h-4 text-white" />
           </div>
           <p className="text-gray-600">Loading...</p>
@@ -61,11 +64,11 @@ export function InitialScreen() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-100 via-blue-50 to-amber-50 flex flex-col">
+    <div className="min-h-screen bg-linear-to-b from-blue-100 via-blue-50 to-amber-50 flex flex-col">
       {/* Header */}
       <div className="px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg flex items-center justify-center">
+          <div className="w-8 h-8 bg-linear-to-br from-violet-500 to-purple-600 rounded-lg flex items-center justify-center">
             <Sparkles className="w-4 h-4 text-white" />
           </div>
           <span className="font-semibold text-gray-900 text-lg">Mockline</span>

@@ -1,8 +1,11 @@
 'use client'
 
-import { AIFile, aiFilesService } from '@/services/api/files'
-import { useCallback, useEffect, useState, useRef } from 'react'
+import { File, filesService } from '@/services/api/files'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
+
+// Backward compatibility - keep old type name as alias
+export type AIFile = File
 
 export interface FileNode {
   name: string
@@ -14,21 +17,21 @@ export interface FileNode {
 }
 
 export interface UseProjectFilesReturn {
-  files: AIFile[]
+  files: File[]
   fileTree: FileNode[]
   loading: boolean
   error: string | null
   selectedFileContent: string | null
   loadingContent: boolean
-  loadFileContent: (file: AIFile) => Promise<void>
+  loadFileContent: (file: File) => Promise<void>
   refreshFiles: () => Promise<void>
 }
 
 /**
  * Hook to manage project files and file tree structure
  */
-export function useProjectFiles(projectId?: string): UseProjectFilesReturn {
-  const [files, setFiles] = useState<AIFile[]>([])
+export function useProjectFiles(projectId?: string, initialFiles: File[] = []): UseProjectFilesReturn {
+  const [files, setFiles] = useState<File[]>(initialFiles)
   const [fileTree, setFileTree] = useState<FileNode[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -37,6 +40,7 @@ export function useProjectFiles(projectId?: string): UseProjectFilesReturn {
   
   // Use ref to track current projectId to prevent stale closures
   const currentProjectIdRef = useRef(projectId)
+  const initialProjectIdRef = useRef(projectId)
   const loadingRef = useRef(false)
 
   const loadFiles = useCallback(async () => {
@@ -50,8 +54,8 @@ export function useProjectFiles(projectId?: string): UseProjectFilesReturn {
       setLoading(true)
       setError(null)
       
-      const projectFiles = await aiFilesService.find({
-        query: { projectId: currentProjectId }
+      const projectFiles = await filesService.find({
+        projectId: currentProjectId
       })
       
       // Only update if we're still on the same project
@@ -78,17 +82,25 @@ export function useProjectFiles(projectId?: string): UseProjectFilesReturn {
     currentProjectIdRef.current = projectId
   }, [projectId])
 
+  useEffect(() => {
+    if (initialFiles.length > 0) {
+      setFiles(initialFiles)
+    }
+  }, [initialFiles])
+
   // Load files when projectId changes
   useEffect(() => {
     if (projectId) {
-      loadFiles()
+      if (projectId !== initialProjectIdRef.current || initialFiles.length === 0) {
+        loadFiles()
+      }
     } else {
       setFiles([])
       setFileTree([])
       setSelectedFileContent(null)
       setError(null)
     }
-  }, [projectId]) // Only depend on projectId
+  }, [projectId, initialFiles.length, loadFiles]) // Only depend on projectId and initial data
 
   // Convert flat file list to tree structure
   useEffect(() => {
@@ -101,7 +113,7 @@ export function useProjectFiles(projectId?: string): UseProjectFilesReturn {
   }, [files])
   
 
-  const loadFileContent = useCallback(async (file: AIFile) => {
+  const loadFileContent = useCallback(async (file: File) => {
     try {
       setLoadingContent(true)
       setSelectedFileContent(null)
@@ -145,7 +157,7 @@ export function useProjectFiles(projectId?: string): UseProjectFilesReturn {
 /**
  * Build a tree structure from flat file list
  */
-function buildFileTree(files: AIFile[]): FileNode[] {
+function buildFileTree(files: File[]): FileNode[] {
   const tree: FileNode[] = []
   const pathMap = new Map<string, FileNode>()
 
@@ -158,18 +170,27 @@ function buildFileTree(files: AIFile[]): FileNode[] {
     
     for (let i = 0; i < pathParts.length; i++) {
       const part = pathParts[i]
+      if (!part) {
+        continue
+      }
       const isLastPart = i === pathParts.length - 1
       currentPath = currentPath ? `${currentPath}/${part}` : part
       
       if (!pathMap.has(currentPath)) {
-        const node: FileNode = {
-          name: part,
-          type: isLastPart ? 'file' : 'folder',
-          path: currentPath,
-          children: isLastPart ? undefined : [],
-          fileId: isLastPart ? file._id : undefined,
-          r2Key: isLastPart ? file.r2Key : undefined
-        }
+        const node: FileNode = isLastPart
+          ? {
+              name: part,
+              type: 'file',
+              path: currentPath,
+              fileId: file._id,
+              r2Key: file.r2Key
+            }
+          : {
+              name: part,
+              type: 'folder',
+              path: currentPath,
+              children: []
+            }
         
         pathMap.set(currentPath, node)
         
@@ -193,6 +214,6 @@ function buildFileTree(files: AIFile[]): FileNode[] {
 /**
  * Find file by path in the files array
  */
-export function findFileByPath(files: AIFile[], path: string): AIFile | undefined {
+export function findFileByPath(files: File[], path: string): File | undefined {
   return files.find(file => file.path === path)
 }

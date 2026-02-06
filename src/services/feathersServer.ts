@@ -8,9 +8,16 @@ import { cookies } from 'next/headers'
 export const createFeathersServerClient = async () => {
   type ServiceTypes = {
     users: RestService
-    categories: RestService
-    stories: RestService
-    uploads: RestService
+    'ai-projects': RestService
+    'ai-files': RestService
+    'ai-file-versions': RestService
+    'ai-models': RestService
+    conversations: RestService
+    messages: RestService
+    projects: RestService
+    files: RestService
+    endpoints: RestService
+    r2: RestService
   }
 
   const app = feathers<ServiceTypes>()

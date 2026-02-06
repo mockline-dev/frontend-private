@@ -1,23 +1,24 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { aiProjectsService, AIProject } from '@/services/api/aiProjects'
+import { Project, ProjectQuery, projectsService } from '@/services/api/projects'
+import { Params } from '@feathersjs/feathers'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
-export function useAIProjects() {
-  const [projects, setProjects] = useState<AIProject[]>([])
-  const [loading, setLoading] = useState(false)
+export function useAIProjects(initialProjects: Project[] = []) {
+  const [projects, setProjects] = useState<Project[]>(initialProjects)
+  const [loading, setLoading] = useState(initialProjects.length === 0)
   const [error, setError] = useState<string | null>(null)
 
   const loadProjects = async () => {
     try {
       setLoading(true)
       setError(null)
-      const result = await aiProjectsService.find({
+      const result = await projectsService.find({
         $sort: { createdAt: -1 },
         $limit: 10
-      })
-      setProjects(result.data)
+      } as Params<ProjectQuery>)
+      setProjects(result?.data || [])
     } catch (err) {
       console.error('Failed to load projects:', err)
       setError('Failed to load projects')
@@ -28,16 +29,22 @@ export function useAIProjects() {
   }
 
   useEffect(() => {
-    loadProjects()
-  }, [])
+    setProjects(initialProjects)
+  }, [initialProjects])
+
+  useEffect(() => {
+    if (initialProjects.length === 0) {
+      loadProjects()
+    }
+  }, [initialProjects.length])
 
   // Listen for real-time project updates
   useEffect(() => {
-    const unsubscribeCreated = aiProjectsService.onCreated((project) => {
+    const unsubscribeCreated = projectsService.onCreated((project) => {
       setProjects(prev => [project, ...prev])
     })
 
-    const unsubscribePatched = aiProjectsService.onPatched((project) => {
+    const unsubscribePatched = projectsService.onPatched((project) => {
       setProjects(prev => prev.map(p => p._id === project._id ? project : p))
     })
 
@@ -51,7 +58,7 @@ export function useAIProjects() {
     const totalProjects = projects.length
     const readyProjects = projects.filter(p => p.status === 'ready').length
     const generatingProjects = projects.filter(p => p.status === 'generating').length
-    
+
     return {
       total: totalProjects,
       ready: readyProjects,

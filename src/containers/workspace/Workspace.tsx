@@ -9,6 +9,9 @@ import { TestPanel } from '@/containers/workspace/components/TestPanel';
 import { useAIProject } from '@/hooks/useAIProject';
 import { useProjectFiles } from '@/hooks/useProjectFiles';
 import { useAuth } from '@/providers/AuthProvider';
+import type { File } from '@/services/api/files';
+import type { Project } from '@/services/api/projects';
+import { clearSavedPrompt, getSavedPrompt } from '@/utils/promptStorage';
 import {
   Code2,
   FolderTree,
@@ -17,27 +20,44 @@ import {
   TestTube2
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-export function Workspace() {
-  const { logout, savedPrompt, setSavedPrompt } = useAuth();
+interface WorkspaceProps {
+  initialProjectId: string | undefined
+  initialProject?: Project | null
+  initialFiles?: File[]
+}
+
+export function Workspace({
+  initialProjectId,
+  initialProject = null,
+  initialFiles = []
+}: WorkspaceProps) {
+  const { logout } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [projectName, setProjectName] = useState('New Project');
-  const [currentProjectId, setCurrentProjectId] = useState<string | undefined>();
-  const { project, createProject, loading: projectLoading } = useAIProject(currentProjectId);
-  const { fileTree, files, selectedFileContent, loadingContent, loadFileContent } = useProjectFiles(currentProjectId);
+  const [currentProjectId, setCurrentProjectId] = useState<string | undefined>(
+    initialProjectId || initialProject?._id
+  );
+  const { project, createProject, loading: projectLoading } = useAIProject(
+    currentProjectId,
+    initialProject
+  );
+  const { fileTree, files, selectedFileContent, loadingContent, loadFileContent } = useProjectFiles(
+    currentProjectId,
+    initialFiles
+  );
   const [selectedFile, setSelectedFile] = useState<string>('src/server.js');
   const [sidebarView, setSidebarView] = useState<'files' | 'ai'>('files');
   const [activeView, setActiveView] = useState<'code' | 'api'>('code');
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
   
-  // Refs to prevent stale closures and track state
   const isCreatingProjectRef = useRef(false);
   const hasInitializedRef = useRef(false);
 
+
   const handleCreateProject = useCallback(async (prompt: string) => {
-    // Prevent multiple simultaneous calls
     if (projectLoading || isCreatingProjectRef.current) return
     
     try {
@@ -46,8 +66,9 @@ export function Workspace() {
       const newProject = await createProject({
         name: prompt.length > 50 ? prompt.substring(0, 50) + '...' : prompt,
         description: prompt,
-        framework: 'feathersjs', 
-        language: 'typescript' 
+        framework: 'feathersjs',
+        language: 'typescript',
+        model: 'llama3.2:3b'
       })
       
       if (newProject) {
@@ -59,23 +80,23 @@ export function Workspace() {
     }
   }, [createProject, projectLoading])
 
-  // Handle prompt from URL or saved prompt - only run once on mount
   useEffect(() => {
     if (hasInitializedRef.current) return
     
     const promptFromUrl = searchParams.get('prompt')
     const existingProjectId = searchParams.get('projectId')
-    const prompt = promptFromUrl || savedPrompt
+    const savedPromptFromStorage = getSavedPrompt()
+    const prompt = promptFromUrl || savedPromptFromStorage
     
     if (existingProjectId && existingProjectId !== currentProjectId) {
       setCurrentProjectId(existingProjectId)
       hasInitializedRef.current = true
     } else if (prompt && !currentProjectId && !projectLoading && !isCreatingProjectRef.current) {
       handleCreateProject(prompt)
-      setSavedPrompt(null)
+      clearSavedPrompt()
       hasInitializedRef.current = true
     }
-  }, [searchParams, savedPrompt, currentProjectId, projectLoading, handleCreateProject, setSavedPrompt]) 
+  }, [searchParams, currentProjectId, projectLoading, handleCreateProject])
 
   
   useEffect(() => {
@@ -87,7 +108,15 @@ export function Workspace() {
   const handleNavigate = (page: 'dashboard' | 'workspace') => {
     router.push(page === 'dashboard' ? '/dashboard' : '/workspace')
   }
-
+  
+  const handleFileSelect = useCallback(async (filePath: string) => {
+    setSelectedFile(filePath);
+    const file = files.find(f => f.path === filePath);
+    if (file) {
+      await loadFileContent(file);
+    }
+  }, [files, loadFileContent]);
+  
   if (projectLoading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -98,14 +127,6 @@ export function Workspace() {
     )
   }
 
-  // Handle file selection
-  const handleFileSelect = useCallback(async (filePath: string) => {
-    setSelectedFile(filePath);
-    const file = files.find(f => f.path === filePath);
-    if (file) {
-      await loadFileContent(file);
-    }
-  }, [files, loadFileContent]);
 
   return (
     <div className="h-screen flex flex-col bg-white">
@@ -198,7 +219,7 @@ export function Workspace() {
                 )}
               </div>
             ) : (
-              <AiAgent projectId={currentProjectId} />
+              <AiAgent projectId={currentProjectId as string} />
             )}
           </div>
         </div>
@@ -238,7 +259,7 @@ export function Workspace() {
               </div>
             </>
           ) : (
-            <TestPanel projectId={currentProjectId} />
+            <TestPanel projectId={currentProjectId as string} />
           )}
         </div>
       </div>
@@ -258,7 +279,7 @@ export function Workspace() {
       <Terminal
         isOpen={isTerminalOpen} 
         onClose={() => setIsTerminalOpen(false)}
-        projectId={currentProjectId}
+        projectId={currentProjectId as string}
       />
     </div>
   );

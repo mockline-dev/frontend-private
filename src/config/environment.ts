@@ -26,7 +26,7 @@ interface EnvironmentConfig {
 
 const config: EnvironmentConfig = {
   // API URLs - use environment variables with fallbacks
-  aiServiceUrl: process.env.NEXT_PUBLIC_AI_SERVICE_URL || 'http://localhost:11434',
+  aiServiceUrl: process.env.NEXT_PUBLIC_AI_SERVICE_URL || 'http://localhost:8000',
   backendUrl: process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3030',
   
   // Feature flags
@@ -34,7 +34,7 @@ const config: EnvironmentConfig = {
   enableMockData: process.env.NEXT_PUBLIC_ENABLE_MOCK_DATA === 'true',
   
   // AI Configuration
-  defaultAiModel: process.env.NEXT_PUBLIC_DEFAULT_AI_MODEL || 'phi3:mini',
+  defaultAiModel: process.env.NEXT_PUBLIC_DEFAULT_AI_MODEL || 'llama3.2:3b',
   streamingEnabled: process.env.NEXT_PUBLIC_STREAMING_ENABLED !== 'false',
   
   // File handling

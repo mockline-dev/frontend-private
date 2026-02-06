@@ -3,6 +3,7 @@
 import { UserMenu } from '@/components/custom/UserMenu';
 import { Button } from '@/components/ui/button';
 import { useAIProjects } from '@/hooks/useAIProjects';
+import type { AIProject } from '@/services/api/aiProjects';
 import { useAuth } from '@/providers/AuthProvider';
 import {
   AlertCircle,
@@ -17,9 +18,13 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
-export function Dashboard() {
+interface DashboardProps {
+  initialProjects?: AIProject[]
+}
+
+export function Dashboard({ initialProjects = [] }: DashboardProps) {
   const { user, logout } = useAuth();
-  const { projects, loading, getProjectStats, getRecentProjects } = useAIProjects();
+  const { projects, loading, getProjectStats, getRecentProjects } = useAIProjects(initialProjects);
   const router = useRouter();
 
   const handleCreateProject = () => {

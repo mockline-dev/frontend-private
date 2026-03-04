@@ -57,7 +57,7 @@ export const filesService = {
     return await feathersClient.service('files').get(id)
   },
 
-  async create(data: { projectId: string; messageId?: string; name: string; key: string; fileType: string; size: number }): Promise<File> {
+  async create(data: { projectId: string; messageId?: string; name: string; key: string; fileType: string; size: number; currentVersion?: number }): Promise<File> {
     await feathersClient.authenticate()
     return await feathersClient.service('files').create(data)
   },
@@ -68,6 +68,16 @@ export const filesService = {
       query: { projectId }
     })
     return result.data
+  },
+
+  async patch(id: string, data: Partial<Pick<File, 'size' | 'currentVersion'>>): Promise<File> {
+    await feathersClient.authenticate()
+    return await feathersClient.service('files').patch(id, data)
+  },
+
+  async remove(id: string): Promise<File> {
+    await feathersClient.authenticate()
+    return await feathersClient.service('files').remove(id)
   },
 
   async getFileUrl(fileId: string): Promise<string> {

@@ -22,11 +22,15 @@ export function useAIProject(projectId?: string, initialProject: Project | null 
     const unsubscribePatched = projectsService.onPatched((updatedProject) => {
       if (updatedProject._id === project._id) {
         setProject(updatedProject)
-        
-        if (updatedProject.status === 'ready' && project.status === 'generating') {
+
+        if (updatedProject.status === 'generating' && project.status === 'initializing') {
+          toast.info('Generating your backend...', { duration: Infinity, id: 'generating' })
+        } else if (updatedProject.status === 'ready' && project.status !== 'ready') {
+          toast.dismiss('generating')
           toast.success('Project generated successfully!')
-        } else if (updatedProject.status === 'error' && project.status === 'generating') {
-          toast.error('Project generation failed')
+        } else if (updatedProject.status === 'error') {
+          toast.dismiss('generating')
+          toast.error(updatedProject.errorMessage || 'Project generation failed')
         }
       }
     })

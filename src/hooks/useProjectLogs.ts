@@ -143,54 +143,13 @@ export function useProjectLogs(projectId?: string): UseProjectLogsReturn {
       return
     }
 
-    const loadInitialLogs = async () => {
-      try {
-        setLoading(true)
-        setError(null)
-
-        // Add initial system logs
-        addLog({
-          type: 'system',
-          message: `Loading logs for project ${projectId}...`,
-          source: 'terminal'
-        })
-
-        // Simulate loading project-specific logs
-        // In a real implementation, this would fetch from the backend
-        setTimeout(() => {
-          addLog({
-            type: 'success',
-            message: 'Project initialized successfully',
-            source: 'system'
-          })
-
-          addLog({
-            type: 'info',
-            message: 'Backend generation completed',
-            source: 'ai-service'
-          })
-
-          addLog({
-            type: 'info',
-            message: 'Files uploaded to storage',
-            source: 'r2-service'
-          })
-        }, 1000)
-
-      } catch (err) {
-        console.error('Failed to load initial logs:', err)
-        setError('Failed to load logs')
-        addLog({
-          type: 'error',
-          message: 'Failed to load project logs',
-          source: 'terminal'
-        })
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadInitialLogs()
+    setLoading(true)
+    addLog({
+      type: 'system',
+      message: `Connected to project ${projectId}`,
+      source: 'terminal'
+    })
+    setLoading(false)
   }, [projectId, addLog])
 
   // Auto-connect Socket.IO when projectId is available
@@ -208,34 +167,6 @@ export function useProjectLogs(projectId?: string): UseProjectLogsReturn {
       disconnectWebSocket()
     }
   }, [disconnectWebSocket])
-
-  // Simulate some periodic logs for demo purposes (only when not connected to real backend)
-  useEffect(() => {
-    if (!projectId || isConnected) return
-
-    const interval = setInterval(() => {
-      const logTypes: Array<LogEntry['type']> = ['info', 'success']
-      const messages = [
-        'Health check passed',
-        'Database connection stable',
-        'Memory usage: 45%',
-        'Request processed successfully',
-        'Cache updated',
-        'Backup completed'
-      ]
-
-      const randomType = logTypes[Math.floor(Math.random() * logTypes.length)] as LogEntry['type']
-      const randomMessage = messages[Math.floor(Math.random() * messages.length)] as string
-
-      addLog({
-        type: randomType,
-        message: randomMessage,
-        source: 'server'
-      })
-    }, 10000) // Add a log every 10 seconds
-
-    return () => clearInterval(interval)
-  }, [projectId, isConnected, addLog])
 
   return {
     logs,

@@ -3,6 +3,8 @@ import { Dashboard } from '@/containers/dashboard/Dashboard'
 import type { Project } from '@/services/api/projects'
 import { createFeathersServerClient } from '@/services/feathersServer'
 
+export const revalidate = 30 // ISR: revalidate every 30 seconds
+
 export default async function DashboardPage() {
   let initialProjects: Project[] = []
 

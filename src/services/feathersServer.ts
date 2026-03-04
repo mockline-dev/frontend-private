@@ -53,10 +53,3 @@ export const createFeathersServerClient = async () => {
   return app
 }
 
-// Export a function to create a new authenticated instance for each request
-// This ensures proper authentication for each user's request
-export const feathersServer = async () => {
-  // Always create a new instance to ensure proper authentication
-  // with the current user's JWT token
-  return await createFeathersServerClient()
-}

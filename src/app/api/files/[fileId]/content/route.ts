@@ -1,13 +1,14 @@
-import { feathersServer } from '@/services/feathersServer'
-import { NextRequest, NextResponse } from 'next/server'
+import { createFeathersServerClient } from '@/services/feathersServer';
+import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { fileId: string } }
+  props: { params: Promise<{ fileId: string }> }
 ) {
   try {
 
-    const { fileId } = (await params)
+    const params = await props.params;
+    const { fileId } = params
 
     if (!fileId) {
       console.error('[File Content API] Missing fileId in params')
@@ -20,7 +21,7 @@ export async function GET(
     console.log('[File Content API] Fetching file content for fileId:', fileId)
 
     // Get feathers client instance
-    const app = await feathersServer()
+    const app = await createFeathersServerClient()
 
     // Get file metadata from backend (changed from 'ai-files' to 'files')
     console.log('[File Content API] Getting file metadata...')

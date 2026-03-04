@@ -4,9 +4,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSeparator } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { useLogin } from '@/hooks/auth/useLogin'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
-import { useLogin } from '@/hooks/auth/useLogin'
 
 export function Login({ className, ...props }: React.ComponentProps<'div'>) {
   const { login, loginWithGoogle, loading, googleLoading, errors, data, updateData } = useLogin()

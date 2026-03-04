@@ -1,8 +1,8 @@
+import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { AuthProvider } from '@/providers/AuthProvider'
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Toaster } from 'sonner'
-import { AuthProvider } from '@/providers/AuthProvider'
-import { ErrorBoundary } from '@/components/ErrorBoundary'
 import './globals.css'
 
 const geistSans = Geist({

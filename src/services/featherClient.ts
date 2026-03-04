@@ -1,41 +1,41 @@
-import authentication from '@feathersjs/authentication-client';
-import { Application, feathers } from '@feathersjs/feathers';
+import auth from '@feathersjs/authentication-client';
+import { feathers } from '@feathersjs/feathers';
 import socketio from '@feathersjs/socketio-client';
-import io, { Socket } from 'socket.io-client';
+import { io } from 'socket.io-client';
 
-const feathersClient: Application = feathers();
+const feathersClient = feathers();
 
-// Ensure environment variable is available before creating socket
-const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL;
+const apiSocketBase = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3030';
+const socketPath = process.env.NEXT_PUBLIC_SOCKET_PATH || '/socket.io';
 
-if (!socketUrl) {
-    console.error('[Socket.IO] NEXT_PUBLIC_SOCKET_URL is not defined');
-}
+const normalizedSocketPath = socketPath.startsWith('/') ? socketPath : `/${socketPath}`;
 
-const socket: Socket = io(socketUrl || 'http://localhost:3030', {
+const socket = io(apiSocketBase, {
     transports: ['websocket', 'polling'],
     forceNew: true,
+    path: normalizedSocketPath
 });
-
-// Add connection status monitoring
-socket.on('connect', () => {
-    console.log('[Socket.IO] Connected successfully');
-});
-
-socket.on('connect_error', (error) => {
-    console.error('[Socket.IO] Connection error:', error);
-});
-
-socket.on('disconnect', (reason) => {
-    console.warn('[Socket.IO] Disconnected:', reason);
-});
-
-socket.on('error', (error) => {
-    console.error('[Socket.IO] Error:', error);
-});
-
 
 feathersClient.configure(socketio(socket));
-feathersClient.configure(authentication({}));
+feathersClient.configure(auth({}));
+
+// Development-only connection monitoring for debugging
+if (process.env.NODE_ENV === 'development') {
+    socket.on('connect', () => {
+        console.log('[Feathers] Socket connected');
+    });
+
+    socket.on('connect_error', (error) => {
+        console.error('[Feathers] Connection error:', error);
+    });
+
+    socket.on('disconnect', (reason) => {
+        console.warn('[Feathers] Socket disconnected:', reason);
+    });
+
+    socket.on('error', (error) => {
+        console.error('[Feathers] Socket error:', error);
+    });
+}
 
 export default feathersClient;

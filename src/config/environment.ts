@@ -34,7 +34,7 @@ const config: EnvironmentConfig = {
   enableMockData: process.env.NEXT_PUBLIC_ENABLE_MOCK_DATA === 'true',
   
   // AI Configuration
-  defaultAiModel: process.env.NEXT_PUBLIC_DEFAULT_AI_MODEL || 'llama3.2:3b',
+  defaultAiModel: process.env.NEXT_PUBLIC_DEFAULT_AI_MODEL || 'qwen2.5-coder:7b',
   streamingEnabled: process.env.NEXT_PUBLIC_STREAMING_ENABLED !== 'false',
   
   // File handling

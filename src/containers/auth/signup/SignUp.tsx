@@ -3,10 +3,10 @@
 import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSeparator } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { useLogin } from '@/hooks/auth/useLogin'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
 import { useState } from 'react'
-import { useLogin } from '@/hooks/auth/useLogin'
 import { useRegister } from '../hooks/useRegister'
 
 export function Signup({ className, ...props }: React.ComponentProps<'form'>) {

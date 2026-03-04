@@ -10,6 +10,7 @@ export interface Project {
   language: string
   model: string
   status: 'initializing' | 'generating' | 'ready' | 'error'
+  errorMessage?: string
   createdAt: number
   updatedAt: number
 }

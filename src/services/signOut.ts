@@ -7,7 +7,7 @@ import { appRoutes } from '@/config/appRoutes'
 
 export const signOut = async () => {
   cookies().delete('currentUser')
-  cookies().delete('feathers-jwt')
+  cookies().delete('jwt')
 
   redirect(appRoutes.signOut)
 }

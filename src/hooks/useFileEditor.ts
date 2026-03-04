@@ -1,7 +1,9 @@
 'use client'
 
-import type { AIFile } from '@/services/api/files'
-import { r2Service } from '@/services/api/files'
+import type { File } from '@/services/api/files'
+import { filesService } from '@/services/api/files'
+import { projectsService } from '@/services/api/projects'
+import feathersClient from '@/services/featherClient'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -11,16 +13,13 @@ export interface UseFileEditorReturn {
   hasUnsavedChanges: boolean
   isSaving: boolean
   saveFile: () => Promise<void>
-  createFile: (path: string, content: string, language: string) => Promise<void>
-  deleteFile: (file: AIFile) => Promise<void>
+  createFile: (name: string, fileContent: string, fileType: string) => Promise<void>
+  deleteFile: (file: File) => Promise<void>
 }
 
-/**
- * Hook to manage file editing with Monaco Editor
- */
 export function useFileEditor(
   projectId: string | undefined,
-  file: AIFile | null,
+  file: File | null,
   onFileSaved?: () => void,
   onFileDeleted?: () => void
 ): UseFileEditorReturn {
@@ -28,88 +27,90 @@ export function useFileEditor(
   const [originalContent, setOriginalContent] = useState<string>('')
   const [isSaving, setIsSaving] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
-  const editorRef = useRef<any>(null)
+  const selectedFileRef = useRef<string>('')
 
-  // Update content when file changes
+  // Reset content when selected file changes
   useEffect(() => {
-    if (file && file.path !== selectedFileRef.current) {
+    if (file && file.name !== selectedFileRef.current) {
       setContent('')
       setOriginalContent('')
       setHasUnsavedChanges(false)
-      selectedFileRef.current = file.path
+      selectedFileRef.current = file.name
     }
-  }, [file?.path])
+  }, [file?.name])
 
   // Track unsaved changes
   useEffect(() => {
-    const isChanged = content !== originalContent
-    setHasUnsavedChanges(isChanged)
+    setHasUnsavedChanges(content !== originalContent && content.length > 0)
   }, [content, originalContent])
 
-  // Auto-save on file change
-  useEffect(() => {
-    if (hasUnsavedChanges && autoSaveRef.current) {
-      const timer = setTimeout(() => {
-        if (editorRef.current && projectId && file) {
-          saveFile()
-        }
-      }, autoSaveDelay)
-      return () => clearTimeout(timer)
-    }
-  }, [hasUnsavedChanges, projectId, file])
-
-  const selectedFileRef = useRef<string>('')
-  const autoSaveRef = useRef(true)
-  const autoSaveDelay = 2000 // 2 seconds
-
   const saveFile = useCallback(async () => {
-    if (!projectId || !file || !editorRef.current) {
-      return
-    }
+    if (!projectId || !file) return
 
     setIsSaving(true)
     try {
-      // Get current content from editor
-      const currentContent = editorRef.current?.getValue() || content
+      // Verify project ownership before saving
+      const authUser = feathersClient.get('authentication')?.user
+      if (!authUser) {
+        throw new Error('You must be authenticated to save files')
+      }
 
-      // Upload to R2
-      await r2Service.uploadFile(file.r2Key, currentContent, 'text/plain')
+      const project = await projectsService.get(projectId)
+      if (project.userId !== authUser._id) {
+        throw new Error('You do not have permission to modify/delete this project')
+      }
 
-      // Update file metadata in ai-files
-      // Note: This would require a backend endpoint to update file size
-      // For now, we'll just show success message
+      await feathersClient.service('uploads').create({
+        key: file.key,
+        content,
+        contentType: 'text/plain',
+        projectId
+      })
 
-      setOriginalContent(currentContent)
+      await filesService.patch(file._id, {
+        size: new TextEncoder().encode(content).length,
+        currentVersion: (file.currentVersion || 1) + 1
+      })
+
+      setOriginalContent(content)
       setHasUnsavedChanges(false)
-      toast.success(`File saved: ${file.path}`)
+      toast.success(`Saved: ${file.name}`)
       onFileSaved?.()
     } catch (error) {
       console.error('Failed to save file:', error)
-      toast.error('Failed to save file')
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      toast.error(`Failed to save "${file.name}". ${errorMessage}. Please try again.`)
     } finally {
       setIsSaving(false)
     }
   }, [projectId, file, content, onFileSaved])
 
-  const createFile = useCallback(async (path: string, fileContent: string, language: string) => {
+  const createFile = useCallback(async (name: string, fileContent: string, fileType: string) => {
     if (!projectId) {
       toast.error('No project selected')
       return
     }
 
+    setIsSaving(true)
     try {
-      setIsSaving(true)
+      const key = `${projectId}/${name}`
 
-      // Generate R2 key
-      const r2Key = `${projectId}/${path}`
+      await feathersClient.service('uploads').create({
+        key,
+        content: fileContent,
+        contentType: 'text/plain',
+        projectId
+      })
 
-      // Upload to R2
-      await r2Service.uploadFile(r2Key, fileContent, 'text/plain')
+      await filesService.create({
+        projectId,
+        name,
+        key,
+        fileType,
+        size: new TextEncoder().encode(fileContent).length
+      })
 
-      // Note: Creating ai-files record would require backend endpoint
-      // For now, we'll just show success message
-
-      toast.success(`File created: ${path}`)
+      toast.success(`Created: ${name}`)
       onFileSaved?.()
     } catch (error) {
       console.error('Failed to create file:', error)
@@ -119,26 +120,33 @@ export function useFileEditor(
     }
   }, [projectId, onFileSaved])
 
-  const deleteFile = useCallback(async (fileToDelete: AIFile) => {
+  const deleteFile = useCallback(async (fileToDelete: File) => {
     if (!projectId) {
       toast.error('No project selected')
       return
     }
 
+    setIsSaving(true)
     try {
-      setIsSaving(true)
+      // Verify project ownership before deleting
+      const authUser = feathersClient.get('authentication')?.user
+      if (!authUser) {
+        throw new Error('You must be authenticated to delete files')
+      }
 
-      // Delete from R2
-      await r2Service.deleteFile(fileToDelete.r2Key)
+      const project = await projectsService.get(projectId)
+      if (project.userId !== authUser._id) {
+        throw new Error('You do not have permission to modify/delete this project')
+      }
 
-      // Note: Deleting ai-files record would require backend endpoint
-      // For now, we'll just show success message
+      await feathersClient.service('files').remove(fileToDelete._id)
 
-      toast.success(`File deleted: ${fileToDelete.path}`)
+      toast.success(`Deleted: ${fileToDelete.name}`)
       onFileDeleted?.()
     } catch (error) {
       console.error('Failed to delete file:', error)
-      toast.error('Failed to delete file')
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      toast.error(`Failed to delete "${fileToDelete.name}". ${errorMessage}. Please try again.`)
     } finally {
       setIsSaving(false)
     }

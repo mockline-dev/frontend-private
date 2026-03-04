@@ -21,6 +21,7 @@ interface FileTreeProps {
   data: FileNode[];
   onFileClick?: (path: string) => void;
   selectedFile?: string;
+  updatingFiles?: Set<string>; // Files being updated by Mocky
 }
 
 function getFileIcon(fileName: string) {
@@ -40,12 +41,14 @@ function TreeNode({
   node, 
   level = 0, 
   onFileClick, 
-  selectedFile 
+  selectedFile,
+  updatingFiles
 }: { 
   node: FileNode; 
   level?: number; 
-  onFileClick?: (path: string) => void;
-  selectedFile?: string;
+  onFileClick?: ((path: string) => void) | undefined;
+  selectedFile?: string | undefined;
+  updatingFiles?: Set<string> | undefined;
 }) {
   const [isOpen, setIsOpen] = useState(level === 0);
   const Icon = node.type === 'folder' 
@@ -84,6 +87,12 @@ function TreeNode({
           node.type === 'folder' ? 'text-gray-600' : 'text-gray-400'
         }`} />
         <span className="text-xs flex-1 truncate text-gray-700">{node.name}</span>
+        {node.type === 'file' && updatingFiles?.has(node.path) && (
+          <span className="ml-auto flex h-2 w-2 relative">
+            <span className="animate-ping absolute h-2 w-2 rounded-full bg-violet-400 opacity-75" />
+            <span className="relative rounded-full h-2 w-2 bg-violet-500" />
+          </span>
+        )}
       </button>
       {node.type === 'folder' && isOpen && node.children && (
         <div>
@@ -94,6 +103,7 @@ function TreeNode({
               level={level + 1}
               onFileClick={onFileClick}
               selectedFile={selectedFile}
+              updatingFiles={updatingFiles}
             />
           ))}
         </div>
@@ -102,7 +112,7 @@ function TreeNode({
   );
 }
 
-export function FileTree({ data, onFileClick, selectedFile }: FileTreeProps) {
+export function FileTree({ data, onFileClick, selectedFile, updatingFiles }: FileTreeProps) {
   return (
     <div className="py-1">
       {data.map((node, index) => (
@@ -111,6 +121,7 @@ export function FileTree({ data, onFileClick, selectedFile }: FileTreeProps) {
           node={node}
           onFileClick={onFileClick}
           selectedFile={selectedFile}
+          updatingFiles={updatingFiles}
         />
       ))}
     </div>

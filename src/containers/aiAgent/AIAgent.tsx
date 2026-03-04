@@ -2,14 +2,20 @@
 
 import { Button } from '@/components/ui/button';
 import { defaultAiModel, getApiUrl } from '@/config/environment';
+import { FileUpdate, FileUpdatePreview } from '@/containers/workspace/components/FileUpdatePreview';
+import { filesService, type File as FileType } from '@/services/api/files';
 import { Message, messagesService } from '@/services/api/messages';
+import feathersClient from '@/services/featherClient';
 import { PromptValidationResult, validatePrompt } from '@/utils/promptValidation';
-import { Loader2, Send, Sparkles } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Loader2, Send } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 interface AIAgentProps {
   projectId?: string;
+  files?: FileType[];
+  selectedFile?: string;
+  selectedFileContent?: string;
 }
 
 interface StreamMessage {
@@ -18,18 +24,21 @@ interface StreamMessage {
 }
 
 const suggestedPrompts = [
-  "Add authentication middleware",
-  "Create a new API endpoint",
-  "Add database connection",
-  "Implement error handling",
-  "Add input validation"
+  "Help me add JWT authentication",
+  "Optimize my database queries",
+  "Add rate limiting to endpoints",
+  "Review my API structure",
+  "Add Docker configuration"
 ];
 
-export function AiAgent({ projectId }: AIAgentProps) {
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+export function AiAgent({ projectId, files = [], selectedFile, selectedFileContent }: AIAgentProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [fileUpdates, setFileUpdates] = useState<FileUpdate[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
 
@@ -39,7 +48,151 @@ export function AiAgent({ projectId }: AIAgentProps) {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, fileUpdates]);
+
+  // Parse FILE_UPDATE blocks from AI response
+  const parseFileUpdates = useCallback((content: string): FileUpdate[] => {
+    const updates: FileUpdate[] = [];
+    const updatePattern = /FILE_UPDATE:\s*\n([\s\S]*?)(?=FILE_UPDATE:|$)/g;
+    
+    let match;
+    while ((match = updatePattern.exec(content)) !== null) {
+      if (!match[1]) continue;
+      
+      const updateText = match[1].trim();
+      const lines = updateText.split('\n');
+      
+      let filename = '';
+      let action: 'create' | 'modify' | 'delete' = 'modify';
+      let description = '';
+      let content = '';
+      let language = 'plaintext';
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (!line) continue;
+        
+        if (line.startsWith('filename:')) {
+          filename = line.replace('filename:', '').trim();
+          // Detect language from extension
+          const ext = filename.split('.').pop()?.toLowerCase();
+          if (ext === 'js' || ext === 'jsx' || ext === 'ts' || ext === 'tsx') {
+            language = 'javascript';
+          } else if (ext === 'py') {
+            language = 'python';
+          } else if (ext === 'json') {
+            language = 'json';
+          } else if (ext === 'md') {
+            language = 'markdown';
+          } else if (ext === 'css') {
+            language = 'css';
+          } else if (ext === 'html') {
+            language = 'html';
+          }
+        } else if (line.startsWith('action:')) {
+          const actionText = line.replace('action:', '').trim().toLowerCase();
+          if (actionText === 'create' || actionText === 'modify' || actionText === 'delete') {
+            action = actionText;
+          }
+        } else if (line.startsWith('description:')) {
+          description = line.replace('description:', '').trim();
+        } else if (line === '---' || line === '```') {
+          // Start of content block
+          content = lines.slice(i + 1).join('\n');
+          break;
+        }
+      }
+      
+      if (filename && (action === 'delete' || content)) {
+        updates.push({ filename, action, description, content, language });
+      }
+    }
+    
+    return updates;
+  }, []);
+
+  // Handle accepting a file update
+  const handleAcceptUpdate = useCallback(async (update: FileUpdate) => {
+    if (!projectId) return;
+
+    try {
+      if (update.action === 'delete') {
+        // Find the file and delete it
+        const file = files.find(f => f.name === update.filename);
+        if (file) {
+          await filesService.remove(file._id);
+          toast.success(`Deleted: ${update.filename}`);
+        }
+      } else {
+        // Upload the new/updated file content
+        const key = `${projectId}/${update.filename}`;
+        
+        // Validate file size before upload
+        const contentSize = new TextEncoder().encode(update.content).length;
+        if (contentSize > MAX_FILE_SIZE) {
+          toast.error(`File size exceeds 10MB limit. Current size: ${(contentSize / (1024 * 1024)).toFixed(2)}MB`);
+          return;
+        }
+        
+        await feathersClient.service('uploads').create({
+          key,
+          content: update.content,
+          contentType: 'text/plain',
+          projectId
+        });
+
+        // Find existing file or create new metadata
+        const existingFile = files.find(f => f.name === update.filename);
+        
+        if (existingFile) {
+          // Update existing file
+          await filesService.patch(existingFile._id, {
+            size: new TextEncoder().encode(update.content).length,
+            currentVersion: (existingFile.currentVersion || 1) + 1
+          });
+          toast.success(`Updated: ${update.filename} (v${(existingFile.currentVersion || 1) + 1})`);
+        } else {
+          // Create new file metadata
+          await filesService.create({
+            projectId,
+            name: update.filename,
+            key,
+            fileType: update.filename.split('.').pop() || 'text',
+            size: new TextEncoder().encode(update.content).length,
+            currentVersion: 1
+          });
+          toast.success(`Created: ${update.filename}`);
+        }
+      }
+
+      // Remove the update from the list
+      setFileUpdates(prev => prev.filter(u => u.filename !== update.filename));
+    } catch (error) {
+      console.error('Failed to accept file update:', error);
+      toast.error('Failed to update file');
+    }
+  }, [projectId, files]);
+
+  // Handle rejecting a file update
+  const handleRejectUpdate = useCallback((update: FileUpdate) => {
+    // Remove the update from the list
+    setFileUpdates(prev => prev.filter(u => u.filename !== update.filename));
+    
+    // Optional: Send feedback to conversation
+    // This could be added as a system message or user message
+  }, []);
+
+  // Handle accepting all file updates
+  const handleAcceptAllUpdates = useCallback(async () => {
+    const results = await Promise.allSettled(
+      fileUpdates.map(update => handleAcceptUpdate(update))
+    );
+    
+    const failedUpdates = results.filter(result => result.status === 'rejected');
+    if (failedUpdates.length > 0) {
+      toast.error(`${failedUpdates.length} update(s) failed. Please try again.`);
+    }
+  }, [fileUpdates, handleAcceptUpdate]);
 
   // Load messages for the project on mount
   useEffect(() => {
@@ -105,6 +258,13 @@ export function AiAgent({ projectId }: AIAgentProps) {
     try {
       setIsStreaming(true);
 
+      // Build project context
+      const projectContext = {
+        files: files.map(f => f.name),
+        selectedFile: selectedFile || null,
+        selectedFileContent: selectedFileContent || null
+      };
+
       const response = await fetch(getApiUrl('/api/stream'), {
         method: 'POST',
         headers: {
@@ -112,7 +272,8 @@ export function AiAgent({ projectId }: AIAgentProps) {
         },
         body: JSON.stringify({
           messages,
-          model: defaultAiModel
+          model: defaultAiModel,
+          context: projectContext
         }),
       });
 
@@ -150,6 +311,12 @@ export function AiAgent({ projectId }: AIAgentProps) {
                   await messagesService.patch(aiMessage._id, {
                     content: fullContent
                   });
+
+                  // Parse file updates from the streaming content
+                  const updates = parseFileUpdates(fullContent);
+                  if (updates.length > 0) {
+                    setFileUpdates(updates);
+                  }
                 }
               } catch {
                 // Skip invalid JSON lines
@@ -160,6 +327,7 @@ export function AiAgent({ projectId }: AIAgentProps) {
       }
     } catch (error) {
       console.error('Error streaming AI response:', error);
+      toast.error('Failed to get AI response. Please try again.');
       throw error;
     } finally {
       setIsStreaming(false);
@@ -250,8 +418,8 @@ export function AiAgent({ projectId }: AIAgentProps) {
             }`}
           >
             {message.role === 'assistant' && (
-              <div className="w-6 h-6 bg-black rounded-md flex items-center justify-center shrink-0">
-                <Sparkles className="w-3 h-3 text-white" />
+              <div className="w-6 h-6 bg-gradient-to-br from-violet-500 to-purple-600 rounded-md flex items-center justify-center shrink-0">
+                <span className="text-white text-xs font-bold">M</span>
               </div>
             )}
             <div
@@ -267,14 +435,14 @@ export function AiAgent({ projectId }: AIAgentProps) {
         ))}
         {(isLoading || isStreaming) && (
           <div className="flex gap-2">
-            <div className="w-6 h-6 bg-black rounded-md flex items-center justify-center">
-              <Sparkles className="w-3 h-3 text-white" />
+            <div className="w-6 h-6 bg-gradient-to-br from-violet-500 to-purple-600 rounded-md flex items-center justify-center">
+              <span className="text-white text-xs font-bold">M</span>
             </div>
             <div className="bg-gray-100 rounded-lg px-3 py-2">
               <div className="flex items-center gap-2">
                 <Loader2 className="w-3.5 h-3.5 text-gray-600 animate-spin" />
                 <span className="text-xs text-gray-600">
-                  {isStreaming ? 'Generating response...' : 'Processing...'}
+                  {isStreaming ? 'Mocky is thinking...' : 'Processing...'}
                 </span>
               </div>
             </div>
@@ -282,6 +450,17 @@ export function AiAgent({ projectId }: AIAgentProps) {
         )}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* File Updates Preview */}
+      {fileUpdates.length > 0 && (
+        <FileUpdatePreview
+          updates={fileUpdates}
+          currentFiles={new Map(files.map(f => [f.name, '']))}
+          onAccept={handleAcceptUpdate}
+          onReject={handleRejectUpdate}
+          onAcceptAll={handleAcceptAllUpdates}
+        />
+      )}
 
       {/* Suggested Prompts */}
       {messages.length <= 1 && (
@@ -308,7 +487,7 @@ export function AiAgent({ projectId }: AIAgentProps) {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask me anything..."
+            placeholder="Ask Mocky..."
             className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-1.5 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
             disabled={isLoading || isStreaming}
           />

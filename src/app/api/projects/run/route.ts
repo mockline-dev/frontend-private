@@ -1,5 +1,5 @@
 import type { File } from '@/services/api/files'
-import { feathersServer } from '@/services/feathersServer'
+import { createFeathersServerClient } from '@/services/feathersServer'
 import { exec } from 'child_process'
 import { existsSync } from 'fs'
 import { mkdir, readFile, rm, writeFile } from 'fs/promises'
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get feathers client instance
-    const app = await feathersServer()
+    const app = await createFeathersServerClient()
 
     // Get project details
     const project = await app.service('projects').get(projectId)

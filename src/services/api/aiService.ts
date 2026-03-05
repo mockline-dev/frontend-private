@@ -1,4 +1,5 @@
-import feathersClient from '@/services/featherClient'
+import { fetchAIResponse } from '@/api/aiService/fetchAIResponse'
+import { generateAIResponse } from '@/api/aiService/generateAIResponse'
 
 export interface AIServiceRequest {
   projectId: string
@@ -7,6 +8,7 @@ export interface AIServiceRequest {
   temperature?: number
   maxTokens?: number
   generateFiles?: boolean
+  [key: string]: unknown
 }
 
 export interface AIServiceResponse {
@@ -52,12 +54,18 @@ export interface AIServiceInfo {
 
 export const aiService = {
   async create(data: AIServiceRequest): Promise<AIServiceResponse> {
-    await feathersClient.authenticate()
-    return await feathersClient.service('ai-service').create(data)
+    const result = await generateAIResponse(data)
+    if (!result.success) {
+      throw new Error(result.error)
+    }
+    return result.data
   },
 
   async find(): Promise<AIServiceInfo> {
-    await feathersClient.authenticate()
-    return await feathersClient.service('ai-service').find()
+    const result = await fetchAIResponse()
+    if (!result.success) {
+      throw new Error(result.error)
+    }
+    return result.data
   }
 }

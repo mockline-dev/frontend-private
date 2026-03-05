@@ -1,13 +1,15 @@
 
+import { createUpload } from '@/api/uploads/createUpload';
+import { patchUpload } from '@/api/uploads/patchUpload';
+import { updateUpload } from '@/api/uploads/updateUpload';
 import { hashFileName } from '@/services/hashFileName';
-import feathersClient from './featherClient';
 
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
 
 export default async function uploadFileMultipart(file: File, fileObject: File, setUploadProgress?: (progress: number) => void): Promise<string | null> {
     try {
         const hashedFilename = await hashFileName(file.name);
-        const initResponse = await feathersClient.service('uploads').create({
+        const initResponse = await createUpload({
             key: hashedFilename,
             contentType: file.type
         });
@@ -26,7 +28,7 @@ export default async function uploadFileMultipart(file: File, fileObject: File, 
                 reader.readAsArrayBuffer(chunk);
             });
 
-            const partResponse = await feathersClient.service('uploads').patch(null, {
+            const partResponse = await patchUpload('', {
                 partNumber: i + 1,
                 uploadId,
                 key,
@@ -47,7 +49,7 @@ export default async function uploadFileMultipart(file: File, fileObject: File, 
             }
         }
 
-        const completeResponse = await feathersClient.service('uploads').update(null, {
+        const completeResponse = await updateUpload('', {
             uploadId,
             key,
             parts,

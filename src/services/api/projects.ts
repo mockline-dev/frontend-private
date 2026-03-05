@@ -1,5 +1,9 @@
+import { createProject } from '@/api/projects/createProject'
+import { deleteProject } from '@/api/projects/deleteProject'
+import { fetchProjectById } from '@/api/projects/fetchProjectById'
+import { fetchProjects } from '@/api/projects/fetchProjects'
+import { updateProject } from '@/api/projects/updateProject'
 import feathersClient from '@/services/featherClient'
-import { Params, Query } from '@feathersjs/feathers'
 
 export interface Project {
   _id: string
@@ -13,6 +17,11 @@ export interface Project {
   errorMessage?: string
   createdAt: number
   updatedAt: number
+  // Progress tracking fields
+  filesGenerated?: number
+  totalFiles?: number
+  generationProgress?: number
+  currentStage?: string
 }
 
 export interface CreateProjectData {
@@ -21,6 +30,7 @@ export interface CreateProjectData {
   framework: string
   language: string
   model: string
+  [key: string]: unknown
 }
 
 export interface ProjectQuery {
@@ -33,31 +43,46 @@ export interface ProjectQuery {
 
 export const projectsService = {
   async create(data: CreateProjectData): Promise<Project> {
-    await feathersClient.authenticate()
-    return await feathersClient.service('projects').create(data)
+    const result = await createProject(data)
+    if (!result.success) {
+      throw new Error(result.error)
+    }
+    return result.data
   },
 
-  async find(query?: Params<ProjectQuery>): Promise<{ data: Project[]; total?: number; limit?: number; skip?: number;  $sort?: {createdAt?: number;}}> {
-    await feathersClient.authenticate()
-    return await feathersClient.service('projects').find({ query: query as Query })
+  async find(query?: ProjectQuery): Promise<{ data: Project[]; total?: number; limit?: number; skip?: number;  $sort?: {createdAt?: number;}}> {
+    const result = await fetchProjects(query ? { query: query as Record<string, unknown> } : undefined)
+    if (!result.success) {
+      throw new Error(result.error)
+    }
+    return result.data
   },
 
   async get(id: string): Promise<Project> {
-    await feathersClient.authenticate()
-    return await feathersClient.service('projects').get(id)
+    const result = await fetchProjectById({ id })
+    if (!result.success) {
+      throw new Error(result.error)
+    }
+    return result.data
   },
 
   async patch(id: string, data: Partial<Project>): Promise<Project> {
-    await feathersClient.authenticate()
-    return await feathersClient.service('projects').patch(id, data)
+    const result = await updateProject({ id, data })
+    if (!result.success) {
+      throw new Error(result.error)
+    }
+    return result.data
   },
 
   async remove(id: string): Promise<Project> {
-    await feathersClient.authenticate()
-    return await feathersClient.service('projects').remove(id)
+    const result = await deleteProject({ id })
+    if (!result.success) {
+      throw new Error(result.error)
+    }
+    return result.data
   },
 
-  // Real-time event listeners
+  // Real-time event listeners - Note: These should use feathersClient for real-time updates
   onCreated(callback: (project: Project) => void) {
     feathersClient.service('projects').on('created', callback)
     return () => feathersClient.service('projects').off('created', callback)

@@ -1,5 +1,7 @@
 'use client'
 
+import { getCurrentUser } from '@/api/auth/getCurrentUser'
+import { deleteFile as deleteFileApi } from '@/api/files/deleteFile'
 import type { File } from '@/services/api/files'
 import { filesService } from '@/services/api/files'
 import { projectsService } from '@/services/api/projects'
@@ -50,13 +52,13 @@ export function useFileEditor(
     setIsSaving(true)
     try {
       // Verify project ownership before saving
-      const authUser = feathersClient.get('authentication')?.user
-      if (!authUser) {
+      const currentUserResult = await getCurrentUser()
+      if (!currentUserResult.success || !currentUserResult.user) {
         throw new Error('You must be authenticated to save files')
       }
 
       const project = await projectsService.get(projectId)
-      if (project.userId !== authUser._id) {
+      if (project.userId !== currentUserResult.user.feathersId) {
         throw new Error('You do not have permission to modify/delete this project')
       }
 
@@ -129,17 +131,17 @@ export function useFileEditor(
     setIsSaving(true)
     try {
       // Verify project ownership before deleting
-      const authUser = feathersClient.get('authentication')?.user
-      if (!authUser) {
+      const currentUserResult = await getCurrentUser()
+      if (!currentUserResult.success || !currentUserResult.user) {
         throw new Error('You must be authenticated to delete files')
       }
 
       const project = await projectsService.get(projectId)
-      if (project.userId !== authUser._id) {
+      if (project.userId !== currentUserResult.user.feathersId) {
         throw new Error('You do not have permission to modify/delete this project')
       }
 
-      await feathersClient.service('files').remove(fileToDelete._id)
+      await deleteFileApi({ id: fileToDelete._id })
 
       toast.success(`Deleted: ${fileToDelete.name}`)
       onFileDeleted?.()

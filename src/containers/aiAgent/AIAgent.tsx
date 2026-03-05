@@ -232,29 +232,47 @@ export function AiAgent({ projectId, files = [], selectedFile, selectedFileConte
 
   // Validate prompt with AI service
   const validatePromptWithAI = async (prompt: string): Promise<PromptValidationResult> => {
-    try {
-      const response = await fetch(getApiUrl('/api/validate-prompt'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ prompt }),
-      });
+    const maxRetries = 3;
+    const baseDelay = 1000; // 1 second
 
-      if (!response.ok) {
-        throw new Error('Failed to validate prompt');
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetch(getApiUrl('/api/validate-prompt'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ prompt }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        return await response.json();
+      } catch (error) {
+        console.error(`Validation attempt ${attempt} failed:`, error);
+
+        // If it's the last attempt, fall back to client-side validation
+        if (attempt === maxRetries) {
+          console.warn('All validation attempts failed, falling back to client-side validation');
+          return validatePrompt(prompt);
+        }
+
+        // Exponential backoff: 1s, 2s, 4s
+        const delay = baseDelay * Math.pow(2, attempt - 1);
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
-
-      return await response.json();
-    } catch (error) {
-      console.error('Error validating prompt:', error);
-      // Fallback to client-side validation
-      return validatePrompt(prompt);
     }
+
+    // This should never be reached, but TypeScript needs it
+    return validatePrompt(prompt);
   };
 
   // Stream AI response
   const streamAIResponse = async (messages: StreamMessage[], currentProjectId: string) => {
+    let aiMessage: Message | null = null;
+
     try {
       setIsStreaming(true);
 
@@ -278,11 +296,12 @@ export function AiAgent({ projectId, files = [], selectedFile, selectedFileConte
       });
 
       if (!response.ok) {
-        throw new Error('Failed to stream response');
+        const errorText = await response.text();
+        throw new Error(`Failed to stream response: ${response.status} ${errorText}`);
       }
 
       // Create initial AI message
-      const aiMessage = await messagesService.create({
+      aiMessage = await messagesService.create({
         projectId: currentProjectId,
         role: 'assistant',
         content: ''
@@ -327,7 +346,24 @@ export function AiAgent({ projectId, files = [], selectedFile, selectedFileConte
       }
     } catch (error) {
       console.error('Error streaming AI response:', error);
-      toast.error('Failed to get AI response. Please try again.');
+
+      // Update the AI message with error information if it was created
+      if (aiMessage) {
+        try {
+          await messagesService.patch(aiMessage._id, {
+            content: `I encountered an error while processing your request: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`
+          });
+        } catch (patchError) {
+          console.error('Failed to update error message:', patchError);
+        }
+      }
+
+      // Show user-friendly error message
+      const errorMessage = error instanceof Error ? error.message : 'Failed to get AI response';
+      toast.error(errorMessage, {
+        description: 'Please check your connection and try again.'
+      });
+
       throw error;
     } finally {
       setIsStreaming(false);
@@ -395,7 +431,13 @@ export function AiAgent({ projectId, files = [], selectedFile, selectedFileConte
 
     } catch (error) {
       console.error('Failed to send message:', error);
-      toast.error('Failed to get AI response');
+
+      // Show detailed error message
+      const errorMessage = error instanceof Error ? error.message : 'Failed to get AI response';
+      toast.error('Failed to send message', {
+        description: errorMessage,
+        duration: 5000
+      });
     } finally {
       setIsLoading(false);
     }

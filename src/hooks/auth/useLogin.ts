@@ -2,17 +2,17 @@ import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth'
 import { FormEvent, useCallback, useState } from 'react'
 import { toast } from 'sonner'
 
+import { useAuth } from '@/providers/AuthProvider'
 import { auth, googleProvider } from '@/services/auth/firebase'
 import { signIn } from '@/services/auth/signIn'
 import feathersClient from '@/services/featherClient'
-import { useAuth } from '@/providers/AuthProvider'
 
 import { LoginData } from '@/types/auth'
 
 type CustomError = { message?: string; code?: string }
 
 export const useLogin = (): {
-  errors?: CustomError
+  errors?: CustomError | undefined
   data: LoginData
   updateData: (value: Partial<LoginData>) => void
   login: (e: FormEvent) => Promise<void>
@@ -96,7 +96,7 @@ export const useLogin = (): {
             ? 'Invalid email or password'
             : error.message || 'An unknown error occurred'
         toast.error(message)
-        setErrors({ message, code: error.code })
+        setErrors({ message, ...(error.code !== undefined && { code: error.code }) })
       } finally {
         setLoading(false)
       }
@@ -145,7 +145,7 @@ export const useLogin = (): {
           ? 'Google sign-in was cancelled'
           : error.message || 'An unknown error occurred'
       toast.error(message)
-      setErrors({ message, code: error.code })
+      setErrors({ message, ...(error.code !== undefined && { code: error.code }) })
     } finally {
       setGoogleLoading(false)
     }

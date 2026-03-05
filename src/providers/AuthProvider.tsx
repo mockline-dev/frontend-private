@@ -1,5 +1,6 @@
 'use client'
 
+import { signOut } from '@/api/auth/signOut'
 import { getCurrentUserClient } from '@/services/getCurrentUserClient'
 import { UserData } from '@/types/auth'
 import { clearSavedPrompt, getSavedPrompt } from '@/utils/promptStorage'
@@ -53,8 +54,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const logout = async () => {
     try {
-      // Call the signOut service
-      await fetch('/api/auth/signout', { method: 'POST' })
+      // Call the signOut server action
+      const result = await signOut();
+      
+      if (!result.success) {
+        console.error('Logout failed:', result.error);
+      }
+      
       setUser(null)
       // Clear session storage using utility function
       clearSavedPrompt()

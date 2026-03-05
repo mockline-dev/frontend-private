@@ -1,7 +1,10 @@
 'use client'
 
+import { downloadProject } from '@/api/projects/downloadProject';
+import { runBackend } from '@/api/projects/runBackend';
 import { FileTree } from '@/components/custom/FileTree';
 import { MonacoEditor } from '@/components/custom/MonacoEditor';
+import { ProjectCreationLoader } from '@/components/custom/ProjectCreationLoader';
 import { UserMenu } from '@/components/custom/UserMenu';
 import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
@@ -14,8 +17,7 @@ import { useFileEditor } from '@/hooks/useFileEditor';
 import { useProjectFiles } from '@/hooks/useProjectFiles';
 import { useAuth } from '@/providers/AuthProvider';
 import type { File } from '@/services/api/files';
-import type { Project } from '@/services/api/projects';
-import feathersClient from '@/services/featherClient';
+import { projectsService, type Project } from '@/services/api/projects';
 import { clearSavedPrompt, getSavedPrompt } from '@/utils/promptStorage';
 import {
   Bot,
@@ -65,6 +67,13 @@ export function Workspace({
   const [activeView, setActiveView] = useState<'code' | 'api'>('code');
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
+  const [creationProgress, setCreationProgress] = useState({
+    stage: 'initializing' as 'initializing' | 'generating' | 'validating' | 'completing' | 'error',
+    progress: 0,
+    filesGenerated: 0,
+    totalFiles: 0,
+    error: undefined as string | undefined
+  });
   
   const isCreatingProjectRef = useRef(false);
   const hasInitializedRef = useRef(false);
@@ -166,6 +175,42 @@ export function Workspace({
     }
   }, [project])
 
+  // Track project generation progress
+  useEffect(() => {
+    if (!project) return
+
+    const unsubscribe = projectsService.onPatched((updatedProject: Project) => {
+      if (updatedProject._id === project._id) {
+        // Update creation progress based on status
+        if (updatedProject.status === 'initializing') {
+          setCreationProgress(prev => ({ ...prev, stage: 'initializing', progress: 10 }))
+        } else if (updatedProject.status === 'generating') {
+          setCreationProgress(prev => ({
+            ...prev,
+            stage: 'generating',
+            progress: 40,
+            filesGenerated: updatedProject.filesGenerated || 0,
+            totalFiles: updatedProject.totalFiles || 10
+          }))
+        } else if (updatedProject.status === 'ready') {
+          setCreationProgress(prev => ({ ...prev, stage: 'completing', progress: 100 }))
+        } else if (updatedProject.status === 'error') {
+          setCreationProgress(prev => ({
+            ...prev,
+            stage: 'error',
+            error: updatedProject.errorMessage || 'Project generation failed'
+          }))
+        }
+      }
+    })
+
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe()
+      }
+    }
+  }, [project])
+
   
   useEffect(() => {
     return () => {
@@ -225,32 +270,30 @@ export function Workspace({
       return;
     }
     try {
-      const auth = feathersClient.get('authentication');
-      const token = auth?.accessToken;
-      const response = await fetch('/api/projects/download', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({ projectId: currentProjectId })
-      });
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || 'Download failed');
+      const result = await downloadProject({ projectId: currentProjectId });
+      
+      if (!result.success) {
+        throw new Error(result.error);
       }
-      const blob = await response.blob();
+      
+      // Decode base64 and create blob
+      const zipData = atob(result.data.zipBase64);
+      const zipArray = new Uint8Array(zipData.length);
+      for (let i = 0; i < zipData.length; i++) {
+        zipArray[i] = zipData.charCodeAt(i);
+      }
+      const blob = new Blob([zipArray], { type: 'application/zip' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${projectName || 'project'}.zip`;
+      a.download = result.data.filename;
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Download error:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to download project');
     }
-  }, [currentProjectId, projectName]);
+  }, [currentProjectId]);
 
   const handleRunBackend = useCallback(async () => {
     if (!currentProjectId) {
@@ -262,36 +305,31 @@ export function Workspace({
     setIsTerminalOpen(true);
 
     try {
-      const response = await fetch('/api/projects/run', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ projectId: currentProjectId }),
-      });
+      const result = await runBackend({ projectId: currentProjectId });
 
-      if (!response.ok) {
-        throw new Error('Failed to start backend');
+      if (!result.success) {
+        throw new Error(result.error);
       }
 
-      const result = await response.json();
+      const data = result.data;
 
-      if (result.success) {
-        
-        toast.success('Backend setup instructions generated!', {
-          description: result.project?.name ? `Project: ${result.project.name}` : undefined,
+      if (data.success) {
+        toast.success('Backend server started successfully!', {
+          description: data.project?.name ? `Project: ${data.project.name}` : undefined,
           duration: 5000,
         });
 
-        
-        console.log('=== Backend Setup Instructions ===');
-        console.log(result.instructions.join('\n'));
+        console.log('=== Backend Server Information ===');
+        console.log(`Message: ${data.message}`);
+        console.log(`Project: ${data.project?.name}`);
         console.log('');
         console.log('Access Points:');
-        console.log(`API: ${result.endpoints?.api}`);
-        console.log(`Docs: ${result.endpoints?.docs}`);
+        console.log(`API: ${data.server?.url}`);
+        console.log(`Docs: ${data.server?.docsUrl}`);
+        console.log(`ReDoc: ${data.server?.redocUrl}`);
+        console.log(`OpenAPI: ${data.server?.openapiUrl}`);
       } else {
-        toast.error('Failed to generate backend instructions');
+        toast.error('Failed to start backend');
       }
     } catch (error) {
       console.error('Failed to run backend:', error);
@@ -303,11 +341,13 @@ export function Workspace({
   
   if (projectLoading) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-gray-600">Creating project...</p>
-        </div>
-      </div>
+      <ProjectCreationLoader
+        stage={creationProgress.stage}
+        progress={creationProgress.progress}
+        filesGenerated={creationProgress.filesGenerated}
+        totalFiles={creationProgress.totalFiles}
+        error={creationProgress.error}
+      />
     )
   }
 

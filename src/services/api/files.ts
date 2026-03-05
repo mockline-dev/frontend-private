@@ -1,5 +1,10 @@
-import feathersClient from '@/services/featherClient'
-import { Params } from '@feathersjs/feathers'
+import { createFile } from '@/api/files/createFile';
+import { deleteFile } from '@/api/files/deleteFile';
+import { fetchFileById } from '@/api/files/fetchFileById';
+import { fetchFileContent } from '@/api/files/fetchFileContent';
+import { fetchFiles } from '@/api/files/fetchFiles';
+import { updateFile } from '@/api/files/updateFile';
+import feathersClient from '../featherClient';
 
 export interface File {
   _id: string
@@ -14,7 +19,7 @@ export interface File {
   updatedAt: number
 }
 
-export interface FileQuery {
+export interface FileQuery extends Record<string, unknown> {
   $sort?: {
     createdAt?: 1 | -1
   }
@@ -48,55 +53,79 @@ export interface FileContent {
 
 export const filesService = {
   async find(query?: FileQuery): Promise<{ data: File[]; total: number; limit: number; skip: number }> {
-    await feathersClient.authenticate()
-    return await feathersClient.service('files').find({ query: query as Params<FileQuery> })
+    const result = await fetchFiles({ ...(query !== undefined && { query }) });
+    if (!result.success) {
+      throw new Error(result.error);
+    }
+    return result.data;
   },
 
   async get(id: string): Promise<File> {
-    await feathersClient.authenticate()
-    return await feathersClient.service('files').get(id)
+    const result = await fetchFileById({ id });
+    if (!result.success) {
+      throw new Error(result.error);
+    }
+    return result.data;
   },
 
   async create(data: { projectId: string; messageId?: string; name: string; key: string; fileType: string; size: number; currentVersion?: number }): Promise<File> {
-    await feathersClient.authenticate()
-    return await feathersClient.service('files').create(data)
+    const result = await createFile(data);
+    if (!result.success) {
+      throw new Error(result.error);
+    }
+    return result.data;
   },
 
   async getByProjectId(projectId: string): Promise<File[]> {
-    await feathersClient.authenticate()
-    const result = await feathersClient.service('files').find({
-      query: { projectId }
-    })
-    return result.data
+    const result = await fetchFiles({ query: { projectId } });
+    if (!result.success) {
+      throw new Error(result.error);
+    }
+    return result.data;
   },
 
   async patch(id: string, data: Partial<Pick<File, 'size' | 'currentVersion'>>): Promise<File> {
-    await feathersClient.authenticate()
-    return await feathersClient.service('files').patch(id, data)
+    const result = await updateFile({ id, data });
+    if (!result.success) {
+      throw new Error(result.error);
+    }
+    return result.data;
   },
 
   async remove(id: string): Promise<File> {
-    await feathersClient.authenticate()
-    return await feathersClient.service('files').remove(id)
+    const result = await deleteFile({ id });
+    if (!result.success) {
+      throw new Error(result.error);
+    }
+    return result.data;
   },
 
   async getFileUrl(fileId: string): Promise<string> {
-    await feathersClient.authenticate()
-    const file = await feathersClient.service('files').get(fileId)
-    // Use file-stream service to get signed URL
-    const streamResult = await feathersClient.service('file-stream').get(file.key)
-    return streamResult.url
+    const result = await fetchFileContent({ fileId });
+    if (!result.success) {
+      throw new Error(result.error);
+    }
+    return result.content;
   },
 
-  // Real-time event listeners
+  // Real-time event listeners - Note: These should use feathersClient for real-time updates
   onCreated(callback: (file: File) => void) {
     feathersClient.service('files').on('created', callback)
     return () => feathersClient.service('files').off('created', callback)
+  },
+
+  onPatched(callback: (file: File) => void) {
+    feathersClient.service('files').on('patched', callback)
+    return () => feathersClient.service('files').off('patched', callback)
+  },
+
+  onUpdated(callback: (file: File) => void) {
+    feathersClient.service('files').on('updated', callback)
+    return () => feathersClient.service('files').off('updated', callback)
   }
 }
 
 // Backward compatibility - keep old service name as alias
 export const aiFilesService = filesService
 
-// Note: r2Service has been removed as backend now uses 'file-stream' service
-// for file access. Use filesService.getFileUrl() instead.
+// Note: Real-time event listeners should be moved to useRealtimeUpdates.ts

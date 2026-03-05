@@ -1,5 +1,6 @@
 'use client'
 
+import { fetchFileContent } from '@/api/files/fetchFileContent'
 import { File, filesService } from '@/services/api/files'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
@@ -139,15 +140,14 @@ export function useProjectFiles(projectId?: string, initialFiles: File[] = []): 
       setLoadingContent(true)
       setSelectedFileContent(null)
       
-      // Get file content from R2 storage
-      const response = await fetch(`/api/files/${file._id}/content`)
+      // Get file content using direct API function
+      const result = await fetchFileContent({ fileId: file._id });
       
-      if (!response.ok) {
-        throw new Error('Failed to load file content')
+      if (!result.success) {
+        throw new Error(result.error);
       }
       
-      const content = await response.text()
-      setSelectedFileContent(content)
+      setSelectedFileContent(result.content);
     } catch (err) {
       console.error('Failed to load file content:', err)
       toast.error('Failed to load file content')

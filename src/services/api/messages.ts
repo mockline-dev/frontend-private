@@ -1,5 +1,8 @@
+import { createMessage } from '@/api/messages/createMessage'
+import { fetchMessageById } from '@/api/messages/fetchMessageById'
+import { fetchMessages } from '@/api/messages/fetchMessages'
+import { updateMessage } from '@/api/messages/updateMessage'
 import feathersClient from '@/services/featherClient'
-import type { Query } from '@feathersjs/feathers'
 
 export interface Message {
   _id: string
@@ -18,6 +21,7 @@ export interface CreateMessageData {
   content: string
   tokens?: number
   status?: string
+  [key: string]: unknown
 }
 
 export interface MessageQuery {
@@ -31,26 +35,38 @@ export interface MessageQuery {
 
 export const messagesService = {
   async create(data: CreateMessageData): Promise<Message> {
-    await feathersClient.authenticate()
-    return await feathersClient.service('messages').create(data)
+    const result = await createMessage(data)
+    if (!result.success) {
+      throw new Error(result.error)
+    }
+    return result.data
   },
 
   async find(query?: MessageQuery): Promise<{ data: Message[]; total: number; limit: number; skip: number }> {
-    await feathersClient.authenticate()
-    return await feathersClient.service('messages').find({ query: query as Query })
+    const result = await fetchMessages(query ? { query: query as Record<string, unknown> } : undefined)
+    if (!result.success) {
+      throw new Error(result.error)
+    }
+    return result.data
   },
 
   async get(id: string): Promise<Message> {
-    await feathersClient.authenticate()
-    return await feathersClient.service('messages').get(id)
+    const result = await fetchMessageById({ id })
+    if (!result.success) {
+      throw new Error(result.error)
+    }
+    return result.data
   },
 
   async patch(id: string, data: Partial<Message>): Promise<Message> {
-    await feathersClient.authenticate()
-    return await feathersClient.service('messages').patch(id, data)
+    const result = await updateMessage({ id, data })
+    if (!result.success) {
+      throw new Error(result.error)
+    }
+    return result.data
   },
 
-  // Real-time event listeners
+  // Real-time event listeners - Note: These should use feathersClient for real-time updates
   onCreated(callback: (message: Message) => void) {
     feathersClient.service('messages').on('created', callback)
     return () => feathersClient.service('messages').off('created', callback)

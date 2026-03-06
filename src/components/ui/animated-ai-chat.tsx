@@ -421,7 +421,7 @@ export function AnimatedAIChat({ value, setValue, onSendClick }: { value: string
                             <motion.button
                                 key={suggestion.prefix}
                                 onClick={() => selectCommandSuggestion(index)}
-                                className="flex items-center gap-2 px-3 py-2 bg-black/[0.02] hover:bg-black/[0.05] rounded-lg text-sm text-black/60 hover:text-black/90 transition-all relative group"
+                                className="flex items-center gap-2 px-3 py-2 bg-black/[0.02] hover:bg-black/[0.05] rounded-lg text-sm text-black/60 hover:text-black/90 transition-all relative group cursor-pointer"
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: index * 0.1 }}

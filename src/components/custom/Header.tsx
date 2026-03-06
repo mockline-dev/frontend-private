@@ -1,5 +1,6 @@
 import { UserData } from '@/containers/auth/types'
 import Image from 'next/image'
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Button } from '../ui/button'
 import { UserMenu } from './UserMenu'
@@ -13,7 +14,7 @@ interface HeaderProps {
 export default function Header({currentUser, onNavigateClick, currentPage}: HeaderProps) {
   return (
       <div className="animate-element animate-delay-100 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-1">
+        <Link href="/" className="flex items-center gap-1">
             <Image
               src="/logo.png"
               alt="Mockline Logo"
@@ -22,7 +23,7 @@ export default function Header({currentUser, onNavigateClick, currentPage}: Head
               className="text-primary-foreground"
             />
           <span className="font-semibold text-foreground text-xl">mockline</span>
-        </div>
+        </Link>
         
         <div className="flex items-center gap-4">
           {currentUser ? (
@@ -31,7 +32,7 @@ export default function Header({currentUser, onNavigateClick, currentPage}: Head
                 onClick={() => onNavigateClick(currentPage)}
                 variant="outline"
                 size="sm"
-                className={`${currentPage === 'dashboard' ? 'hidden' : ''} bg-card/80 backdrop-blur-sm border-border hover:bg-card/90`}
+                className={`${currentPage === 'dashboard' ? 'hidden' : ''}`}
               >
                 {currentPage === 'initial' ? 'Dashboard' : ''}
               </Button>

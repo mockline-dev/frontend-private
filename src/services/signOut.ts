@@ -6,8 +6,8 @@ import { redirect } from 'next/navigation'
 import { appRoutes } from '@/config/appRoutes'
 
 export const signOut = async () => {
-  cookies().delete('currentUser')
-  cookies().delete('jwt')
+  (await cookies()).delete('currentUser');
+  (await cookies()).delete('jwt');
 
   redirect(appRoutes.signOut)
 }

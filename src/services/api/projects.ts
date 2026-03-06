@@ -96,5 +96,10 @@ export const projectsService = {
   onUpdated(callback: (project: Project) => void) {
     feathersClient.service('projects').on('updated', callback)
     return () => feathersClient.service('projects').off('updated', callback)
+  },
+
+  onRemoved(callback: (project: Project) => void) {
+    feathersClient.service('projects').on('removed', callback)
+    return () => feathersClient.service('projects').off('removed', callback)
   }
 }

@@ -2,12 +2,11 @@ import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth'
 import { FormEvent, useCallback, useState } from 'react'
 import { toast } from 'sonner'
 
-import { useAuth } from '@/providers/AuthProvider'
+import { LoginData } from '@/containers/auth/types'
 import { auth, googleProvider } from '@/services/auth/firebase'
 import { signIn } from '@/services/auth/signIn'
 import feathersClient from '@/services/featherClient'
 
-import { LoginData } from '@/types/auth'
 
 type CustomError = { message?: string; code?: string }
 
@@ -27,7 +26,6 @@ export const useLogin = (): {
   })
   const [loading, setLoading] = useState<boolean>(false)
   const [googleLoading, setGoogleLoading] = useState<boolean>(false)
-  const { login: authLogin } = useAuth()
 
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -80,15 +78,6 @@ export const useLogin = (): {
           jwt: authResponse.accessToken,
           userMeta: userCredential.user.providerData
         })
-
-        // Update auth context
-        authLogin({
-          firstName: authResponse.user.firstName,
-          lastName: authResponse.user.lastName,
-          feathersId: authResponse.user._id,
-          jwt: authResponse.accessToken,
-          userMeta: userCredential.user.providerData
-        })
       } catch (err: unknown) {
         const error = err as { code?: string; message?: string }
         const message =
@@ -101,7 +90,7 @@ export const useLogin = (): {
         setLoading(false)
       }
     },
-    [data, authLogin, loading, googleLoading]
+    [data, loading, googleLoading]
   )
 
   const loginWithGoogle = useCallback(async () => {
@@ -129,15 +118,6 @@ export const useLogin = (): {
         userMeta: userCredential.user.providerData,
         jwt: fres.accessToken
       })
-
-      // Update auth context
-      authLogin({
-        feathersId: fres.user._id,
-        firstName: userCredential.user.displayName?.split(' ')[0] || '',
-        lastName: userCredential.user.displayName?.split(' ').slice(1).join(' ') || '',
-        userMeta: userCredential.user.providerData,
-        jwt: fres.accessToken
-      })
     } catch (err: unknown) {
       const error = err as { code?: string; message?: string }
       const message =
@@ -149,7 +129,7 @@ export const useLogin = (): {
     } finally {
       setGoogleLoading(false)
     }
-  }, [loading, googleLoading, authLogin])
+  }, [loading, googleLoading])
 
   return {
     data,

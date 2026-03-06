@@ -49,7 +49,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
       return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-          <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-6 text-center">
+          <div className="max-w-2xl w-full bg-white rounded-lg shadow-lg p-6 text-center">
             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <AlertTriangle className="w-8 h-8 text-red-600" />
             </div>
@@ -63,7 +63,7 @@ export class ErrorBoundary extends Component<Props, State> {
             </p>
 
             {process.env.NODE_ENV === 'development' && this.state.error && (
-              <div className="mb-6 p-4 bg-gray-100 rounded-lg text-left">
+              <div className="h-80 overflow-auto mb-6 p-4 bg-gray-100 rounded-lg text-left">
                 <h3 className="font-medium text-gray-900 mb-2">Error Details:</h3>
                 <pre className="text-xs text-red-600 overflow-auto">
                   {this.state.error.toString()}
@@ -103,17 +103,14 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-// Hook version for functional components
 export function useErrorHandler() {
   const handleError = (error: Error, errorInfo?: ErrorInfo) => {
     console.error('Error handled:', error, errorInfo)
-    // You could send this to an error reporting service
   }
 
   return { handleError }
 }
 
-// Simple error fallback component
 export function ErrorFallback({ 
   error, 
   resetError 

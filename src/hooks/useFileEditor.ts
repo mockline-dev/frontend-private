@@ -1,7 +1,7 @@
 'use client'
 
-import { getCurrentUser } from '@/api/auth/getCurrentUser'
 import { deleteFile as deleteFileApi } from '@/api/files/deleteFile'
+import { UserData } from '@/containers/auth/types'
 import type { File } from '@/services/api/files'
 import { filesService } from '@/services/api/files'
 import { projectsService } from '@/services/api/projects'
@@ -22,8 +22,9 @@ export interface UseFileEditorReturn {
 export function useFileEditor(
   projectId: string | undefined,
   file: File | null,
+  currentUser: UserData,
   onFileSaved?: () => void,
-  onFileDeleted?: () => void
+  onFileDeleted?: () => void,
 ): UseFileEditorReturn {
   const [content, setContent] = useState<string>('')
   const [originalContent, setOriginalContent] = useState<string>('')
@@ -31,7 +32,6 @@ export function useFileEditor(
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const selectedFileRef = useRef<string>('')
 
-  // Reset content when selected file changes
   useEffect(() => {
     if (file && file.name !== selectedFileRef.current) {
       setContent('')
@@ -41,7 +41,6 @@ export function useFileEditor(
     }
   }, [file?.name])
 
-  // Track unsaved changes
   useEffect(() => {
     setHasUnsavedChanges(content !== originalContent && content.length > 0)
   }, [content, originalContent])
@@ -51,14 +50,13 @@ export function useFileEditor(
 
     setIsSaving(true)
     try {
-      // Verify project ownership before saving
-      const currentUserResult = await getCurrentUser()
-      if (!currentUserResult.success || !currentUserResult.user) {
+
+      if (!currentUser) {
         throw new Error('You must be authenticated to save files')
       }
 
       const project = await projectsService.get(projectId)
-      if (project.userId !== currentUserResult.user.feathersId) {
+      if (project.userId !== currentUser.feathersId) {
         throw new Error('You do not have permission to modify/delete this project')
       }
 
@@ -130,14 +128,13 @@ export function useFileEditor(
 
     setIsSaving(true)
     try {
-      // Verify project ownership before deleting
-      const currentUserResult = await getCurrentUser()
-      if (!currentUserResult.success || !currentUserResult.user) {
+
+      if (!currentUser) {
         throw new Error('You must be authenticated to delete files')
       }
 
       const project = await projectsService.get(projectId)
-      if (project.userId !== currentUserResult.user.feathersId) {
+      if (project.userId !== currentUser.feathersId) {
         throw new Error('You do not have permission to modify/delete this project')
       }
 
@@ -152,7 +149,7 @@ export function useFileEditor(
     } finally {
       setIsSaving(false)
     }
-  }, [projectId, onFileDeleted])
+  }, [projectId, onFileDeleted, currentUser])
 
   return {
     content,

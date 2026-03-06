@@ -28,7 +28,7 @@ const nextConfig: NextConfig = {
           "font-src 'self' https://fonts.gstatic.com",
           "img-src 'self' data: https: blob:",
           "connect-src 'self' ws://localhost:* wss://localhost:* http://localhost:* https://localhost:* https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://accounts.google.com https://www.gstatic.com https://firebase.googleapis.com https://firestore.googleapis.com",
-          "frame-src 'self' https://mockline-1a0e0.firebaseapp.com https://accounts.google.com https://www.gstatic.com",
+          "frame-src 'self' https://mockline-1a0e0.firebaseapp.com https://accounts.google.com https://www.gstatic.com https://lh3.googleusercontent.com",
           "worker-src 'self' blob:",
         ].join('; ') }
       ]
@@ -38,7 +38,14 @@ const nextConfig: NextConfig = {
   // Image optimization
   images: {
     formats: ['image/avif', 'image/webp'],
-    remotePatterns: []
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'lh3.googleusercontent.com',
+        port: '',
+        pathname: '/**'
+      }
+    ]
   }
 };
 

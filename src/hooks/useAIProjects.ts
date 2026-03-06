@@ -48,9 +48,14 @@ export function useAIProjects(initialProjects: Project[] = []) {
       setProjects(prev => prev.map(p => p._id === project._id ? project : p))
     })
 
+    const unsubscribeRemoved = projectsService.onRemoved((removedProject) => {
+      setProjects(prev => prev.filter(p => p._id !== removedProject._id))
+    })
+
     return () => {
       unsubscribeCreated()
       unsubscribePatched()
+      unsubscribeRemoved()
     }
   }, [])
 

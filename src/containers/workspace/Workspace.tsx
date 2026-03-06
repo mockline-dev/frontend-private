@@ -14,10 +14,11 @@ import { Terminal } from '@/containers/workspace/components/Terminal';
 import { TestPanel } from '@/containers/workspace/components/TestPanel';
 import { useAIProject } from '@/hooks/useAIProject';
 import { useFileEditor } from '@/hooks/useFileEditor';
+import { useProjectCreation } from '@/hooks/useProjectCreation';
 import { useProjectFiles } from '@/hooks/useProjectFiles';
-import { useAuth } from '@/providers/AuthProvider';
 import type { File } from '@/services/api/files';
-import { projectsService, type Project } from '@/services/api/projects';
+import { type Project } from '@/services/api/projects';
+import { ERROR_CODES, ErrorType } from '@/types/projectCreation';
 import { clearSavedPrompt, getSavedPrompt } from '@/utils/promptStorage';
 import {
   Bot,
@@ -34,38 +35,60 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { UserData } from '../auth/types';
 
 interface WorkspaceProps {
+  currentUser:UserData
   initialProjectId: string | undefined
   initialProject?: Project | null
   initialFiles?: File[]
 }
 
 export function Workspace({
+  currentUser,
   initialProjectId,
   initialProject = null,
   initialFiles = []
 }: WorkspaceProps) {
-  const { logout } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [projectName, setProjectName] = useState('New Project');
   const [currentProjectId, setCurrentProjectId] = useState<string | undefined>(
     initialProjectId || initialProject?._id
   );
-  const { project, createProject, loading: projectLoading } = useAIProject(
+
+  // Track if project creation has been triggered to prevent duplicate requests
+  const creationTriggeredRef = useRef(false);
+
+  // Use useProjectCreation for project creation with error handling
+  const {
+    state: creationState,
+    project: createdProject,
+    createProject,
+    retryCreation,
+    cancelCreation,
+    resetState,
+    isCreating,
+    canRetry,
+    timeElapsed
+  } = useProjectCreation({
+    onSuccess: (project) => {
+      setCurrentProjectId(project._id);
+      setProjectName(project.name);
+      sessionStorage.setItem('currentProjectId', project._id);
+      sessionStorage.setItem('projectInitialized', 'true');
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    }
+  });
+
+  // Use useAIProject for project CRUD operations (creation logic removed)
+  const { project, loading: projectLoading } = useAIProject(
     currentProjectId,
     initialProject
   );
-  
-  // Log when project from useAIProject changes
-  useEffect(() => {
-    console.log('[Workspace] Project from useAIProject changed:', {
-      projectId: project?._id,
-      status: project?.status,
-      hasProject: !!project
-    })
-  }, [project])
+
   const { fileTree, files, selectedFileContent, loadingContent, loadFileContent } = useProjectFiles(
     currentProjectId,
     initialFiles
@@ -76,35 +99,10 @@ export function Workspace({
   const [activeView, setActiveView] = useState<'code' | 'api'>('code');
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
-  const [creationProgress, setCreationProgress] = useState({
-    stage: 'initializing' as 'initializing' | 'generating' | 'validating' | 'completing' | 'error',
-    progress: 0,
-    filesGenerated: 0,
-    totalFiles: 0,
-    error: undefined as string | undefined
-  });
-  
-  // Log creationProgress state changes
-  useEffect(() => {
-    console.log('[Workspace] creationProgress state changed:', creationProgress)
-  }, [creationProgress])
-  
-  const isCreatingProjectRef = useRef(false);
-  const hasInitializedRef = useRef(false);
-  
-  // Log component renders
-  useEffect(() => {
-    console.log('[Workspace] Component rendered', {
-      currentProjectId,
-      projectId: project?._id,
-      projectStatus: project?.status,
-      hasProject: !!project
-    })
-  })
 
-  // Get the currently selected file object
+  // Get currently selected file object
   const selectedFileObj = files.find(f => f.name === selectedFile) || null;
-  
+
   // Use file editor hook
   const {
     content: fileEditorContent,
@@ -115,6 +113,7 @@ export function Workspace({
   } = useFileEditor(
     currentProjectId,
     selectedFileObj,
+    currentUser,
     () => { /* Reload files after save */ }
   );
 
@@ -130,139 +129,77 @@ export function Workspace({
     setFileEditorContent(editorContent);
   }, [editorContent, setFileEditorContent]);
 
+  /**
+   * Creates a new project with given prompt.
+   * Uses useProjectCreation hook for comprehensive error handling.
+   */
   const handleCreateProject = useCallback(async (prompt: string) => {
-    if (projectLoading || isCreatingProjectRef.current) return
+    if (isCreating) return;
 
     try {
-      isCreatingProjectRef.current = true
-
-      const newProject = await createProject({
+      await createProject({
         name: prompt.length > 50 ? prompt.substring(0, 50) + '...' : prompt,
         description: prompt,
         framework: 'fast-api',
         language: 'python',
         model: defaultAiModel
-      })
-      if (newProject) {
-        setCurrentProjectId(newProject._id)
-        setProjectName(newProject.name)
-        
-        sessionStorage.setItem('currentProjectId', newProject._id)
-        sessionStorage.setItem('projectInitialized', 'true')
-      }
-    } finally {
-      isCreatingProjectRef.current = false
+      });
+    } catch (error) {
+      // Error is already handled by useProjectCreation hook
+      console.error('[Workspace] Failed to create project:', error);
     }
-  }, [createProject, projectLoading])
+  }, [createProject, isCreating]);
 
+  /**
+   * Initializes workspace based on URL params or saved state.
+   * Handles project creation from prompt, loading existing project,
+   * or navigating to existing project.
+   */
   useEffect(() => {
-    if (hasInitializedRef.current) return
+    const promptFromUrl = searchParams.get('prompt');
+    const existingProjectId = searchParams.get('projectId');
+    const savedPromptFromStorage = getSavedPrompt();
+    const prompt = promptFromUrl || savedPromptFromStorage;
 
-    const promptFromUrl = searchParams.get('prompt')
-    const existingProjectId = searchParams.get('projectId')
-    const savedPromptFromStorage = getSavedPrompt()
-    const prompt = promptFromUrl || savedPromptFromStorage
+    const projectInitialized = sessionStorage.getItem('projectInitialized');
+    const storedProjectId = sessionStorage.getItem('currentProjectId');
 
-    const projectInitialized = sessionStorage.getItem('projectInitialized')
-    const storedProjectId = sessionStorage.getItem('currentProjectId')
-
-    
     if (existingProjectId && existingProjectId !== currentProjectId) {
-      setCurrentProjectId(existingProjectId)
-      hasInitializedRef.current = true
-      sessionStorage.setItem('currentProjectId', existingProjectId)
-      sessionStorage.setItem('projectInitialized', 'true')
-    }
-    
-    else if (storedProjectId && !currentProjectId) {
-      setCurrentProjectId(storedProjectId)
-      hasInitializedRef.current = true
-      
+      setCurrentProjectId(existingProjectId);
+      sessionStorage.setItem('currentProjectId', existingProjectId);
+      sessionStorage.setItem('projectInitialized', 'true');
+    } else if (storedProjectId && !currentProjectId) {
+      setCurrentProjectId(storedProjectId);
       if (promptFromUrl) {
-        router.replace('/workspace')
+        router.replace('/workspace');
       }
-    }
-    else if (prompt && !currentProjectId && !projectLoading && !isCreatingProjectRef.current && !existingProjectId && !projectInitialized) {
-      handleCreateProject(prompt)
-      clearSavedPrompt()
-      hasInitializedRef.current = true
+    } else if (prompt && !currentProjectId && !isCreating && !existingProjectId && !projectInitialized && !creationTriggeredRef.current) {
+      console.log('[Workspace useEffect] Creating project, setting creationTriggeredRef to true');
+      creationTriggeredRef.current = true;
+      handleCreateProject(prompt);
+      clearSavedPrompt();
     } else if (currentProjectId) {
-      hasInitializedRef.current = true
-      sessionStorage.setItem('projectInitialized', 'true')
+      sessionStorage.setItem('projectInitialized', 'true');
     }
-  }, [searchParams, currentProjectId, projectLoading, handleCreateProject, router])
+  }, [searchParams, currentProjectId, isCreating, handleCreateProject, router]);
 
-  
+  // Update project name when project changes
   useEffect(() => {
     if (project) {
-      setProjectName(project.name)
+      setProjectName(project.name);
     }
-  }, [project])
+  }, [project]);
 
-  // Track project generation progress
-  useEffect(() => {
-    if (!project) return
-
-    console.log('[Workspace] Setting up onPatched listener for project:', project._id, 'current status:', project.status)
-
-    const unsubscribe = projectsService.onPatched((updatedProject: Project) => {
-      console.log('[Workspace] onPatched event received:', {
-        projectId: updatedProject._id,
-        currentProjectId: project._id,
-        updatedStatus: updatedProject.status,
-        currentStatus: project.status,
-        matches: updatedProject._id === project._id
-      })
-      
-      if (updatedProject._id === project._id) {
-        console.log('[Workspace] Updating creationProgress based on status:', updatedProject.status)
-        // Update creation progress based on status
-        if (updatedProject.status === 'initializing') {
-          setCreationProgress(prev => ({ ...prev, stage: 'initializing', progress: 10 }))
-        } else if (updatedProject.status === 'generating') {
-          setCreationProgress(prev => ({
-            ...prev,
-            stage: 'generating',
-            progress: 40,
-            filesGenerated: updatedProject.filesGenerated || 0,
-            totalFiles: updatedProject.totalFiles || 10
-          }))
-        } else if (updatedProject.status === 'ready') {
-          setCreationProgress(prev => ({ ...prev, stage: 'completing', progress: 100 }))
-        } else if (updatedProject.status === 'error') {
-          setCreationProgress(prev => ({
-            ...prev,
-            stage: 'error',
-            error: updatedProject.errorMessage || 'Project generation failed'
-          }))
-        }
-      }
-    })
-
-    return () => {
-      console.log('[Workspace] Cleaning up onPatched listener for project:', project?._id)
-      if (typeof unsubscribe === 'function') {
-        unsubscribe()
-      }
-    }
-  }, [project])
-
-  
-  useEffect(() => {
-    return () => {
-      
-      const currentPath = window.location.pathname
-      if (!currentPath.includes('/workspace')) {
-        sessionStorage.removeItem('currentProjectId')
-        sessionStorage.removeItem('projectInitialized')
-      }
-    }
-  }, [])
-
+  /**
+   * Navigates to specified page.
+   */
   const handleNavigate = (page: 'dashboard' | 'workspace') => {
-    router.push(page === 'dashboard' ? '/dashboard' : '/workspace')
-  }
-  
+    router.push(page === 'dashboard' ? '/dashboard' : '/workspace');
+  };
+
+  /**
+   * Handles file selection from file tree.
+   */
   const handleFileSelect = useCallback(async (filePath: string) => {
     setSelectedFile(filePath);
     const file = files.find(f => f.name === filePath);
@@ -271,6 +208,9 @@ export function Workspace({
     }
   }, [files, loadFileContent]);
 
+  /**
+   * Handles editor content changes.
+   */
   const handleContentChange = useCallback((value: string | undefined) => {
     setEditorContent(value || '');
   }, []);
@@ -300,6 +240,9 @@ export function Workspace({
     return () => window.removeEventListener('keydown', handler);
   }, [saveFile]);
 
+  /**
+   * Downloads project as a ZIP file.
+   */
   const handleDownload = useCallback(async () => {
     if (!currentProjectId) {
       toast.error('No project selected');
@@ -307,11 +250,11 @@ export function Workspace({
     }
     try {
       const result = await downloadProject({ projectId: currentProjectId });
-      
+
       if (!result.success) {
         throw new Error(result.error);
       }
-      
+
       // Decode base64 and create blob
       const zipData = atob(result.data.zipBase64);
       const zipArray = new Uint8Array(zipData.length);
@@ -331,6 +274,9 @@ export function Workspace({
     }
   }, [currentProjectId]);
 
+  /**
+   * Runs backend server for current project.
+   */
   const handleRunBackend = useCallback(async () => {
     if (!currentProjectId) {
       toast.error('No project selected');
@@ -374,42 +320,121 @@ export function Workspace({
       setIsRunning(false);
     }
   }, [currentProjectId]);
-  
-  console.log('[Workspace] Checking loader condition:', {
-    hasProject: !!project,
-    projectId: project?._id,
-    status: project?.status,
-    statusType: typeof project?.status,
-    statusNotReady: project?.status !== 'ready',
-    shouldShowLoader: project && project.status !== 'ready'
-  })
 
-  console.log('[Workspace] RENDER - Loader condition check:', {
-    hasProject: !!project,
-    projectId: project?._id,
-    status: project?.status,
-    statusType: typeof project?.status,
-    statusNotReady: project?.status !== 'ready',
-    wouldShowLoader: project && project.status !== 'ready',
-    timestamp: new Date().toISOString()
-  })
+  /**
+   * Handles back to dashboard action.
+   */
+  const handleBackToDashboard = useCallback(() => {
+    resetState();
+    router.push('/dashboard');
+  }, [resetState, router]);
 
-  if (project && (project.status === undefined || project.status !== 'ready')) {
-    console.log('[Workspace] Showing loader - project exists but status is:', project.status)
-    console.log('[Workspace] Showing loader with stage:', creationProgress.stage)
+  /**
+   * Handles retry action.
+   */
+  const handleRetry = useCallback(() => {
+    retryCreation().catch(err => {
+      console.error('[Workspace] Retry failed:', err);
+    });
+  }, [retryCreation]);
+
+  /**
+   * Cleans up session storage when leaving workspace.
+   */
+  useEffect(() => {
+    return () => {
+      const currentPath = window.location.pathname;
+      if (!currentPath.includes('/workspace')) {
+        sessionStorage.removeItem('currentProjectId');
+        sessionStorage.removeItem('projectInitialized');
+      }
+    };
+  }, []);
+
+  // Unified error handling - check both creation state and project status
+  const hasError = creationState.status === 'error' || project?.status === 'error';
+
+  // Check if there's a prompt in URL (indicates new project creation in progress)
+  const promptFromUrl = searchParams.get('prompt');
+
+  // Show loader when creating or waiting for project to be ready (but not on error)
+  // Also show loader immediately if there's a prompt in URL AND not creating yet (prevents premature workspace render)
+  // Once isCreating becomes true, we rely on that instead of hasPromptInUrl
+  console.log('[Workspace] Loader check:', {
+    hasError,
+    isCreating,
+    creationStateStatus: creationState.status,
+    projectStatus: project?.status,
+    promptFromUrl: !!promptFromUrl,
+    shouldShowLoader: !hasError && (isCreating || (!isCreating && promptFromUrl) || (project && project.status !== 'ready' && project.status !== 'error'))
+  });
+
+  if (!hasError && (isCreating || (!isCreating && promptFromUrl) || (project && project.status !== 'ready' && project.status !== 'error'))) {
+    const baseProps = {
+      state: creationState,
+      progress: creationState.status === 'waiting' ? {
+        progress: project?.generationProgress || 0,
+        filesGenerated: project?.filesGenerated || 0,
+        totalFiles: project?.totalFiles || 10,
+        phase: 'generating' as 'initializing' | 'generating' | 'finalizing'
+      } : {
+        progress: 0,
+        filesGenerated: 0,
+        totalFiles: 0,
+        phase: 'initializing' as 'initializing' | 'generating' | 'finalizing'
+      },
+      onBackToDashboard: handleBackToDashboard,
+      onCancel: cancelCreation
+    };
+
     return (
       <ProjectCreationLoader
-        stage={creationProgress.stage}
-        progress={creationProgress.progress}
-        filesGenerated={creationProgress.filesGenerated}
-        totalFiles={creationProgress.totalFiles}
-        error={creationProgress.error}
+        {...baseProps}
+        {...(canRetry ? { onRetry: handleRetry } : {})}
       />
-    )
+    );
   }
-  
-  console.log('[Workspace] Hiding loader, showing main workspace')
 
+  // Unified error state handling for both creation errors and project status errors
+  // Don't show error state if there's a prompt in URL and not creating yet (project creation might still be starting)
+  if (hasError && !(promptFromUrl && !isCreating)) {
+    // Determine error state - prioritize creation state error, fall back to project error
+    const errorState = creationState.status === 'error'
+      ? creationState
+      : {
+          status: 'error' as const,
+          error: {
+            type: ErrorType.SERVER,
+            code: ERROR_CODES.SERVER_ERROR,
+            message: project?.errorMessage || 'Project generation failed',
+            suggestion: 'Please try creating the project again or contact support if the problem persists.',
+            recoverable: true,
+            timestamp: Date.now()
+          },
+          retryCount: 0
+        };
+
+    // Determine if retry is possible
+    const canRetryError = creationState.status === 'error' ? canRetry : true;
+
+    const baseErrorProps = {
+      state: errorState,
+      progress: {
+        progress: 0,
+        filesGenerated: 0,
+        totalFiles: 0,
+        phase: 'initializing' as 'initializing' | 'generating' | 'finalizing'
+      },
+      onBackToDashboard: handleBackToDashboard
+    };
+
+    return (
+      <ProjectCreationLoader
+        {...baseErrorProps}
+        {...(canRetryError ? { onRetry: handleRetry } : {})}
+      />
+    );
+  }
 
   return (
     <div className="h-screen flex flex-col bg-white">
@@ -434,7 +459,7 @@ export function Workspace({
             </>
           )}
         </nav>
-        
+
         <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center bg-gray-100 rounded-lg p-0.5">
           <button
             onClick={() => setActiveView('code')}
@@ -471,10 +496,10 @@ export function Workspace({
             <Download className="w-3 h-3 mr-1" />
             Download
           </Button>
-          <UserMenu 
-            currentPage="workspace" 
+          <UserMenu
+            currentUser={currentUser}
+            currentPage="workspace"
             onNavigate={handleNavigate}
-            onLogout={logout}
           />
         </div>
       </div>
@@ -614,8 +639,8 @@ export function Workspace({
               )}
             </ResizablePanelGroup>
           </ResizablePanel>
-        </ResizablePanelGroup>
-      </div>
+          </ResizablePanelGroup>
+        </div>
 
       {/* Terminal Toggle Button - Bottom Right */}
       <Button

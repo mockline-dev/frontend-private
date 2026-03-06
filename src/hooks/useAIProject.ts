@@ -1,37 +1,80 @@
 'use client'
 
-import { CreateProjectData, Project, projectsService } from '@/services/api/projects'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Project, projectsService } from '@/services/api/projects'
+import type { ProjectCreationError } from '@/types/projectCreation'
+import { ErrorType } from '@/types/projectCreation'
+import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 export type AIProject = Project
-export type CreateAIProjectData = CreateProjectData
 
-export function useAIProject(projectId?: string, initialProject: Project | null = null) {
-  const [project, setProject] = useState<Project | null>(null)
+/**
+ * Return type for useAIProject hook.
+ * Provides project CRUD operations and real-time updates.
+ */
+export interface UseAIProjectReturn {
+  /** The current project data */
+  project: Project | null
+  /** Whether a project operation is in progress */
+  loading: boolean
+  /** Error information if an operation failed */
+  error: ProjectCreationError | null
+  /** Loads a project by ID */
+  loadProject: (id: string) => Promise<void>
+  /** Updates a project with partial data */
+  updateProject: (id: string, data: Partial<Project>) => Promise<Project | null>
+  /** Deletes a project by ID */
+  deleteProject: (id: string) => Promise<boolean>
+  /** Clears the current error state */
+  clearError: () => void
+}
+
+/**
+ * Hook for managing AI project operations.
+ * 
+ * This hook provides CRUD operations for projects and subscribes to real-time updates
+ * via Feathers.js onPatched events. It focuses on project management operations
+ * after a project has been created.
+ * 
+ * Note: Project creation should be handled by the useProjectCreation hook.
+ * 
+ * @example
+ * ```typescript
+ * const {
+ *   project,
+ *   loading,
+ *   error,
+ *   loadProject,
+ *   updateProject,
+ *   deleteProject,
+ *   clearError
+ * } = useAIProject('project-id')
+ * 
+ * // Load a project
+ * await loadProject('project-id')
+ * 
+ * // Update project
+ * await updateProject('project-id', { name: 'New Name' })
+ * 
+ * // Delete project
+ * await deleteProject('project-id')
+ * ```
+ * 
+ * @param projectId - Optional project ID to load and track
+ * @param initialProject - Optional initial project data
+ * @returns An object containing project data, loading state, and CRUD operations
+ */
+export function useAIProject(projectId?: string, initialProject: Project | null = null): UseAIProjectReturn {
+  const [project, setProject] = useState<Project | null>(initialProject)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  
-  // Log project state changes
-  useEffect(() => {
-    console.log('[useAIProject] Project state changed:', {
-      projectId: project?._id,
-      status: project?.status,
-      hasProject: !!project
-    })
-  }, [project])
-  
-  const currentProjectIdRef = useRef<string | undefined>(undefined)
-  const initialProjectIdRef = useRef(initialProject?._id)
-  const loadingRef = useRef(false)
+  const [error, setError] = useState<ProjectCreationError | null>(null)
 
+  // Real-time updates via Feathers.js onPatched
   useEffect(() => {
-    currentProjectIdRef.current = projectId
-
     if (!projectId) return
 
     const unsubscribePatched = projectsService.onPatched((updatedProject) => {
-      if (updatedProject._id === currentProjectIdRef.current) {
+      if (updatedProject._id === projectId) {
         setProject(updatedProject)
       }
     })
@@ -41,123 +84,124 @@ export function useAIProject(projectId?: string, initialProject: Project | null 
     }
   }, [projectId])
 
+  /**
+   * Loads a project by ID.
+   * 
+   * @param id - The project ID to load
+   * @throws Will throw an error if the project cannot be loaded
+   */
   const loadProject = useCallback(async (id: string) => {
-    if (loadingRef.current || !id) return
-    
+    if (!id) {
+      console.warn('[useAIProject] Cannot load project: no ID provided')
+      return
+    }
+
     try {
-      loadingRef.current = true
       setLoading(true)
       setError(null)
       
       const loadedProject = await projectsService.get(id)
-      
-      if (currentProjectIdRef.current === id) {
-        setProject(loadedProject)
-      }
+      setProject(loadedProject)
     } catch (err) {
-      if (currentProjectIdRef.current === id) {
-        console.error('Failed to load project:', err)
-        setError('Failed to load project')
-        toast.error('Failed to load project')
-      }
+      console.error('[useAIProject] Failed to load project:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load project'
+      setError({
+        type: ErrorType.UNKNOWN,
+        code: 'UNKNOWN_ERROR',
+        message: errorMessage,
+        suggestion: 'Please try again or contact support if the problem persists.',
+        recoverable: true,
+        timestamp: Date.now(),
+        originalError: err
+      })
+      toast.error('Failed to load project')
     } finally {
-      loadingRef.current = false
-      if (currentProjectIdRef.current === id) {
-        setLoading(false)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    currentProjectIdRef.current = projectId
-    if (projectId && projectId !== initialProjectIdRef.current) {
-      loadProject(projectId)
-    }
-  }, [projectId, loadProject])
-
-  const createProject = useCallback(async (data: CreateAIProjectData): Promise<AIProject | null> => {
-    if (loadingRef.current) return null
-
-    try {
-      loadingRef.current = true
-      setLoading(true)
-      setError(null)
-
-      // Validate framework and language
-      const validFrameworks = ['fast-api', 'feathers']
-      const validLanguages = ['python', 'typescript']
-
-      if (!validFrameworks.includes(data.framework)) {
-        throw new Error(`Invalid framework: ${data.framework}. Must be one of: ${validFrameworks.join(', ')}`)
-      }
-
-      if (!validLanguages.includes(data.language)) {
-        throw new Error(`Invalid language: ${data.language}. Must be one of: ${validLanguages.join(', ')}`)
-      }
-
-      console.log('[DEBUG] Creating project with data:', JSON.stringify(data, null, 2))
-      console.log('[DEBUG] Data keys:', Object.keys(data))
-
-      const newProject = await projectsService.create(data)
-      console.log('[DEBUG] New project:', JSON.stringify(newProject, null, 2))
-      setProject(newProject)
-      currentProjectIdRef.current = newProject._id
-      toast.success('Project creation started!')
-      return newProject
-    } catch (err) {
-      console.error('[DEBUG] Failed to create project:', err)
-      console.error('[DEBUG] Error details:', JSON.stringify(err, null, 2))
-      setError('Failed to create project')
-      toast.error('Failed to create project')
-      return null
-    } finally {
-      loadingRef.current = false
       setLoading(false)
     }
   }, [])
 
-  const updateProject = async (id: string, data: Partial<AIProject>): Promise<AIProject | null> => {
+  /**
+   * Updates a project with partial data.
+   * 
+   * @param id - The project ID to update
+   * @param data - Partial project data to update
+   * @returns The updated project, or null if the update failed
+   */
+  const updateProject = useCallback(async (id: string, data: Partial<Project>): Promise<Project | null> => {
     try {
       setLoading(true)
       setError(null)
+      
       const updatedProject = await projectsService.patch(id, data)
       setProject(updatedProject)
       return updatedProject
     } catch (err) {
-      console.error('Failed to update project:', err)
-      setError('Failed to update project')
+      console.error('[useAIProject] Failed to update project:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update project'
+      setError({
+        type: ErrorType.UNKNOWN,
+        code: 'UNKNOWN_ERROR',
+        message: errorMessage,
+        suggestion: 'Please try again or contact support if the problem persists.',
+        recoverable: true,
+        timestamp: Date.now(),
+        originalError: err
+      })
       toast.error('Failed to update project')
       return null
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  const deleteProject = async (id: string): Promise<boolean> => {
+  /**
+   * Deletes a project by ID.
+   * 
+   * @param id - The project ID to delete
+   * @returns true if the project was deleted successfully, false otherwise
+   */
+  const deleteProject = useCallback(async (id: string): Promise<boolean> => {
     try {
       setLoading(true)
       setError(null)
+      
       await projectsService.remove(id)
       setProject(null)
       toast.success('Project deleted successfully')
       return true
     } catch (err) {
-      console.error('Failed to delete project:', err)
-      setError('Failed to delete project')
+      console.error('[useAIProject] Failed to delete project:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete project'
+      setError({
+        type: ErrorType.UNKNOWN,
+        code: 'UNKNOWN_ERROR',
+        message: errorMessage,
+        suggestion: 'Please try again or contact support if the problem persists.',
+        recoverable: true,
+        timestamp: Date.now(),
+        originalError: err
+      })
       toast.error('Failed to delete project')
       return false
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  /**
+   * Clears the current error state.
+   */
+  const clearError = useCallback(() => {
+    setError(null)
+  }, [])
 
   return {
     project,
     loading,
     error,
-    createProject,
+    loadProject,
     updateProject,
     deleteProject,
-    loadProject
+    clearError
   }
 }

@@ -11,5 +11,5 @@ export function ThemeProvider({
 }
 
 export function useTheme() {
-  return useContext(ThemeContext)
+  return React.useContext(ThemeContext)
 }

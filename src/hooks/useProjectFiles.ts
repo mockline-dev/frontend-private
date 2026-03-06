@@ -1,7 +1,9 @@
 'use client'
 
 import { fetchFileContent } from '@/api/files/fetchFileContent'
+import { apiServices } from '@/api/services'
 import { File, filesService } from '@/services/api/files'
+import feathersClient from '@/services/featherClient'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -131,6 +133,47 @@ export function useProjectFiles(projectId?: string, initialFiles: File[] = []): 
       if (typeof unsubscribeCreated === 'function') {
         unsubscribeCreated();
       }
+    };
+  }, [projectId])
+
+  // Add real-time listeners for patched and removed events
+  useEffect(() => {
+    const socket = feathersClient.io;
+    if (!socket) return;
+
+    const setupListeners = async () => {
+      try {
+        await feathersClient.authenticate();
+        const filesService = feathersClient.service(apiServices.files);
+
+        const handlePatchedFile = (patchedFile: File) => {
+          if (patchedFile.projectId === projectId) {
+            setFiles((prev) => prev.map((f) => (f._id === patchedFile._id ? patchedFile : f)));
+          }
+        };
+
+        const handleRemovedFile = (removedFile: File) => {
+          if (removedFile.projectId === projectId) {
+            setFiles((prev) => prev.filter((f) => f._id !== removedFile._id));
+          }
+        };
+
+        filesService.on('patched', handlePatchedFile);
+        filesService.on('removed', handleRemovedFile);
+
+        return () => {
+          filesService.removeListener('patched', handlePatchedFile);
+          filesService.removeListener('removed', handleRemovedFile);
+        };
+      } catch (error) {
+        console.error('Failed to setup socket listeners:', error);
+      }
+    };
+
+    if (socket.connected) setupListeners();
+    socket.on('connect', setupListeners);
+    return () => {
+      socket.off('connect', setupListeners);
     };
   }, [projectId])
   

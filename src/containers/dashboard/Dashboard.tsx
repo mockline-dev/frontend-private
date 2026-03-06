@@ -1,9 +1,8 @@
 'use client'
 
-import { UserMenu } from '@/components/custom/UserMenu';
+import Header from '@/components/custom/Header';
 import { Button } from '@/components/ui/button';
 import { useAIProjects } from '@/hooks/useAIProjects';
-import { useAuth } from '@/providers/AuthProvider';
 import type { Project } from '@/services/api/projects';
 import { projectsService } from '@/services/api/projects';
 import {
@@ -15,7 +14,6 @@ import {
   LayoutGrid,
   Plus,
   Search,
-  Sparkles,
   Trash2,
   TrendingUp,
   X
@@ -23,13 +21,14 @@ import {
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { UserData } from '../auth/types';
 
 interface DashboardProps {
+  currentUser: UserData
   initialProjects?: Project[]
 }
 
-export function Dashboard({ initialProjects = [] }: DashboardProps) {
-  const { user, logout } = useAuth();
+export function Dashboard({currentUser, initialProjects = [] }: DashboardProps) {
   const { projects, loading, getProjectStats, getRecentProjects } = useAIProjects(initialProjects);
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
@@ -41,18 +40,17 @@ export function Dashboard({ initialProjects = [] }: DashboardProps) {
     router.push('/');
   };
 
-  const handleNavigate = (page: 'dashboard' | 'workspace') => {
+  const handleNavigate = (page: 'dashboard' | 'workspace' | 'initial') => {
     router.push(page === 'dashboard' ? '/dashboard' : '/workspace');
   };
 
   const currentHour = new Date().getHours();
   const greeting = currentHour < 12 ? 'Good morning' : currentHour < 18 ? 'Good afternoon' : 'Good evening';
-  const userName = user ? user.firstName || 'User' : 'User';
+  const userName = currentUser ? currentUser.firstName || 'User' : 'User';
   
   const stats = getProjectStats();
   const recentProjects = getRecentProjects(3);
 
-  // Filter projects based on search and status
   const filteredProjects = projects.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           p.description.toLowerCase().includes(searchQuery.toLowerCase());
@@ -60,7 +58,6 @@ export function Dashboard({ initialProjects = [] }: DashboardProps) {
     return matchesSearch && matchesStatus;
   });
 
-  // Display projects based on view
   const displayedProjects = showAllProjects ? filteredProjects : recentProjects;
 
   const formatTimeAgo = (timestamp: number) => {
@@ -104,16 +101,16 @@ export function Dashboard({ initialProjects = [] }: DashboardProps) {
 
     setDeletingProjectId(projectId);
     try {
-      // Verify project ownership before deleting
+  
       const project = await projectsService.get(projectId);
-      if (!user || project.userId !== user.feathersId) {
+      if (!currentUser || project.userId !== currentUser.feathersId) {
         toast.error('You do not have permission to delete this project');
         return;
       }
 
       await projectsService.remove(projectId);
       toast.success(`Deleted: ${projectName}`);
-      // Force refresh by reloading the page
+  
       router.refresh();
     } catch (error) {
       console.error('Failed to delete project:', error);
@@ -124,146 +121,118 @@ export function Dashboard({ initialProjects = [] }: DashboardProps) {
   };
   
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-100 via-blue-50 to-amber-50">
-      {/* Header */}
-      <div className="px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg flex items-center justify-center">
-            <Sparkles className="w-4 h-4 text-white" />
-          </div>
-          <span className="font-semibold text-gray-900 text-lg">Mockline</span>
-        </div>
-        <div className="flex items-center gap-4">
-          <Button
-            onClick={handleCreateProject}
-            className="bg-gray-900 hover:bg-gray-800 text-white text-sm"
-          >
-            <Plus className="w-4 h-4 mr-1.5" />
-            New Project
-          </Button>
-          <UserMenu 
-            currentPage="dashboard" 
-            onNavigate={handleNavigate}
-            onLogout={logout}
-          />
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="max-w-6xl mx-auto px-6 py-8">
-        {/* Greeting */}
+    <div className="min-h-screen bg-background">
+     <Header currentUser={currentUser} currentPage="dashboard" onNavigateClick={() => router.push('/')} />
+      <div className="animate-element animate-delay-300 max-w-6xl mx-auto px-6 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          <h1 className="text-3xl font-bold text-foreground mb-2">
             {greeting}, {userName}!
           </h1>
-          <p className="text-gray-600">
-            Here's what's happening with your projects
+          <p className="text-muted-foreground">
+            Here&apos;s what&apos;s happening with your projects
           </p>
         </div>
 
-        {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <div className="bg-white/80 backdrop-blur-sm rounded-xl border border-white/50 shadow-sm p-5">
+          <div className="bg-card/80 backdrop-blur-sm rounded-xl border border-border shadow-sm p-5">
             <div className="flex items-center justify-between mb-3">
-              <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
-                <FolderOpen className="w-5 h-5 text-blue-600" />
+              <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                <FolderOpen className="w-5 h-5 text-primary" />
               </div>
             </div>
             <div>
-              <p className="text-xs text-gray-500 mb-1">Total Projects</p>
-              <p className="text-3xl font-bold text-gray-900">{loading ? '...' : stats.total}</p>
+              <p className="text-xs text-muted-foreground mb-1">Total Projects</p>
+              <p className="text-3xl font-bold text-foreground">{loading ? '...' : stats.total}</p>
             </div>
           </div>
 
-          <div className="bg-white/80 backdrop-blur-sm rounded-xl border border-white/50 shadow-sm p-5">
+          <div className="bg-card/80 backdrop-blur-sm rounded-xl border border-border shadow-sm p-5">
             <div className="flex items-center justify-between mb-3">
-              <div className="w-10 h-10 bg-purple-50 rounded-lg flex items-center justify-center">
-                <LayoutGrid className="w-5 h-5 text-purple-600" />
+              <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                <LayoutGrid className="w-5 h-5 text-primary" />
               </div>
             </div>
             <div>
-              <p className="text-xs text-gray-500 mb-1">Ready Projects</p>
-              <p className="text-3xl font-bold text-gray-900">{loading ? '...' : stats.ready}</p>
+              <p className="text-xs text-muted-foreground mb-1">Ready Projects</p>
+              <p className="text-3xl font-bold text-foreground">{loading ? '...' : stats.ready}</p>
             </div>
           </div>
 
-          <div className="bg-white/80 backdrop-blur-sm rounded-xl border border-white/50 shadow-sm p-5">
+          <div className="bg-card/80 backdrop-blur-sm rounded-xl border border-border shadow-sm p-5">
             <div className="flex items-center justify-between mb-3">
-              <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center">
-                <TrendingUp className="w-5 h-5 text-green-600" />
+              <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                <TrendingUp className="w-5 h-5 text-primary" />
               </div>
             </div>
             <div>
-              <p className="text-xs text-gray-500 mb-1">This Week</p>
-              <p className="text-3xl font-bold text-gray-900">
+              <p className="text-xs text-muted-foreground mb-1">This Week</p>
+              <p className="text-3xl font-bold text-foreground">
                 {projects.filter(p => {
                   const oneWeekAgo = new Date();
                   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
                   return new Date(p.createdAt) >= oneWeekAgo;
                 }).length}
               </p>
-              <p className="text-xs text-green-600 mt-1">new projects</p>
+              <p className="text-xs text-primary mt-1">new projects</p>
             </div>
           </div>
         </div>
 
-        {/* Quick Actions */}
-        <div className="mb-8">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
+        <div className="animate-element animate-delay-500 mb-8">
+          <h2 className="text-lg font-semibold text-foreground mb-4">Quick Actions</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <button
               onClick={handleCreateProject}
-              className="group bg-gray-900 hover:bg-gray-800 rounded-xl p-6 text-left transition-all flex items-center justify-between"
+              className="group bg-primary hover:bg-primary/90 rounded-xl p-6 text-left transition-all flex items-center justify-between"
             >
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-white/10 rounded-lg flex items-center justify-center">
-                  <Plus className="w-6 h-6 text-white" />
+                <div className="w-12 h-12 bg-primary-foreground/10 rounded-lg flex items-center justify-center">
+                  <Plus className="w-6 h-6 text-primary-foreground" />
                 </div>
                 <div>
-                  <p className="text-white font-medium mb-1">Create New Project</p>
-                  <p className="text-gray-400 text-sm">Start building with AI</p>
+                  <p className="text-primary-foreground font-medium mb-1">Create New Project</p>
+                  <p className="text-primary-foreground/70 text-sm">Start building with AI</p>
                 </div>
               </div>
-              <ArrowRight className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+              <ArrowRight className="w-5 h-5 text-primary-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
             </button>
 
-            <button 
+            <button
               onClick={() => setShowAllProjects(true)}
-              className="group bg-white/80 backdrop-blur-sm hover:bg-white border border-white/50 rounded-xl p-6 text-left transition-all flex items-center justify-between shadow-sm"
+              className="group bg-card/80 backdrop-blur-sm hover:bg-card border border-border rounded-xl p-6 text-left transition-all flex items-center justify-between shadow-sm"
             >
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                  <LayoutGrid className="w-6 h-6 text-gray-700" />
+                <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center">
+                  <LayoutGrid className="w-6 h-6 text-foreground" />
                 </div>
                 <div>
-                  <p className="text-gray-900 font-medium mb-1">View All Projects</p>
-                  <p className="text-gray-500 text-sm">Browse your collection</p>
+                  <p className="text-foreground font-medium mb-1">View All Projects</p>
+                  <p className="text-muted-foreground text-sm">Browse your collection</p>
                 </div>
               </div>
-              <ArrowRight className="w-5 h-5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <ArrowRight className="w-5 h-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
             </button>
           </div>
         </div>
 
-        {/* Projects Section */}
-        <div>
+        <div className="animate-element animate-delay-700">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">
+            <h2 className="text-lg font-semibold text-foreground">
               {showAllProjects ? 'All Projects' : 'Recent Projects'}
             </h2>
             {!showAllProjects && (
-              <button 
+              <button
                 onClick={() => setShowAllProjects(true)}
-                className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1"
+                className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
               >
                 View all
                 <ArrowRight className="w-4 h-4" />
               </button>
             )}
             {showAllProjects && (
-              <button 
+              <button
                 onClick={() => setShowAllProjects(false)}
-                className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1"
+                className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
               >
                 <X className="w-4 h-4" />
                 Show recent
@@ -271,23 +240,22 @@ export function Dashboard({ initialProjects = [] }: DashboardProps) {
             )}
           </div>
 
-          {/* Search and Filter */}
           {showAllProjects && (
             <div className="flex gap-3 mb-4">
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
                   type="text"
                   placeholder="Search projects..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-2 bg-card border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
               </div>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                className="px-4 py-2 bg-card border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
               >
                 <option value="all">All Status</option>
                 <option value="ready">Ready</option>
@@ -297,21 +265,20 @@ export function Dashboard({ initialProjects = [] }: DashboardProps) {
             </div>
           )}
 
-          {/* Project Cards */}
           <div className="grid grid-cols-1 gap-3">
             {loading ? (
               <div className="grid grid-cols-1 gap-3">
                 {[1, 2, 3].map(i => (
-                  <div key={i} className="bg-white/80 backdrop-blur-sm rounded-xl border border-white/50 shadow-sm p-5 animate-pulse">
-                    <div className="h-4 bg-gray-200 rounded w-1/3 mb-2" />
-                    <div className="h-3 bg-gray-200 rounded w-2/3 mb-3" />
-                    <div className="h-3 bg-gray-200 rounded w-1/4" />
+                  <div key={i} className="bg-card/80 backdrop-blur-sm rounded-xl border border-border shadow-sm p-5 animate-pulse">
+                    <div className="h-4 bg-muted rounded w-1/3 mb-2" />
+                    <div className="h-3 bg-muted rounded w-2/3 mb-3" />
+                    <div className="h-3 bg-muted rounded w-1/4" />
                   </div>
                 ))}
               </div>
             ) : displayedProjects.length === 0 ? (
               <div className="text-center py-8">
-                <p className="text-gray-500 mb-2">No projects found</p>
+                <p className="text-muted-foreground mb-2">No projects found</p>
                 <Button onClick={handleCreateProject} variant="outline" size="sm">
                   <Plus className="w-4 h-4 mr-2" />
                   Create your first project
@@ -322,34 +289,34 @@ export function Dashboard({ initialProjects = [] }: DashboardProps) {
                 <button
                   key={project._id}
                   onClick={() => handleProjectClick(project._id)}
-                  className="group bg-white/80 backdrop-blur-sm hover:bg-white border border-white/50 rounded-xl p-5 text-left transition-all shadow-sm relative"
+                  className="group bg-card/80 backdrop-blur-sm hover:bg-card border border-border rounded-xl p-5 text-left transition-all shadow-sm relative"
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <p className="font-medium text-gray-900">{project.name}</p>
+                        <p className="font-medium text-foreground">{project.name}</p>
                         {getStatusIcon(project.status)}
                       </div>
-                      <p className="text-sm text-gray-500 mb-2 line-clamp-1">
+                      <p className="text-sm text-muted-foreground mb-2 line-clamp-1">
                         {project.description}
                       </p>
                       <div className="flex items-center gap-2">
-                        <p className="text-xs text-gray-400">{formatTimeAgo(project.updatedAt)}</p>
-                        <span className="text-xs text-gray-400">•</span>
-                        <p className="text-xs text-gray-400 capitalize">{project.framework}</p>
+                        <p className="text-xs text-muted-foreground/70">{formatTimeAgo(project.updatedAt)}</p>
+                        <span className="text-xs text-muted-foreground/70">•</span>
+                        <p className="text-xs text-muted-foreground/70 capitalize">{project.framework}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <ArrowRight className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                       <Button
                         onClick={(e) => handleDeleteProject(e, project._id, project.name)}
                         disabled={deletingProjectId === project._id}
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-gray-400 hover:text-red-600 hover:bg-red-50"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                       >
                         {deletingProjectId === project._id ? (
-                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600" />
+                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-foreground" />
                         ) : (
                           <Trash2 className="w-3.5 h-3.5" />
                         )}

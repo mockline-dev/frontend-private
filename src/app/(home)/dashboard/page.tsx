@@ -1,11 +1,19 @@
-import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
+
 import { Dashboard } from '@/containers/dashboard/Dashboard'
 import type { Project } from '@/services/api/projects'
 import { createFeathersServerClient } from '@/services/feathersServer'
+import { clearAuthAndRedirect, getCurrentUser } from '@/services/getCurrentUser'
 
 export const revalidate = 30 // ISR: revalidate every 30 seconds
 
 export default async function DashboardPage() {
+  const currentUser = await getCurrentUser()
+
+  if (!currentUser) {
+          clearAuthAndRedirect();
+          return null;
+      }
+      
   let initialProjects: Project[] = []
 
   try {
@@ -22,8 +30,6 @@ export default async function DashboardPage() {
   }
 
   return (
-    <ProtectedRoute>
-      <Dashboard initialProjects={initialProjects} />
-    </ProtectedRoute>
+      <Dashboard currentUser={currentUser} initialProjects={initialProjects} />
   )
 }

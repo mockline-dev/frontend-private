@@ -1,8 +1,13 @@
 import { InitialScreen } from '@/containers/initialScreen/InitialScreen'
+import { clearAuthAndRedirect, getCurrentUser } from '@/services/getCurrentUser'
 
-export const dynamic = 'force-static'
-export const revalidate = false // Never revalidate, truly static
+export default async function HomePage() {
+  const currentUser = await getCurrentUser()
 
-export default function HomePage() {
-  return <InitialScreen />
+  if (!currentUser) {
+    clearAuthAndRedirect()
+    return null
+  }
+
+  return <InitialScreen currentUser={currentUser} />
 }

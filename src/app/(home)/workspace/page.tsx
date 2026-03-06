@@ -1,8 +1,8 @@
-import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { Workspace } from '@/containers/workspace/Workspace'
 
 import type { AIFile } from '@/services/api/files'
 import { createFeathersServerClient } from '@/services/feathersServer'
+import { clearAuthAndRedirect, getCurrentUser } from '@/services/getCurrentUser'
 
 interface WorkspacePageProps {
   searchParams?: {
@@ -11,6 +11,13 @@ interface WorkspacePageProps {
 }
 
 export default async function WorkspacePage({ searchParams }: WorkspacePageProps) {
+  const currentUser = await getCurrentUser()
+
+  if (!currentUser) {
+    await clearAuthAndRedirect()
+    return null
+  }
+  
   const projectId = (await searchParams)?.projectId
   let initialProject = null
   let initialFiles: AIFile[] = []
@@ -29,12 +36,11 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
   }
 
   return (
-    <ProtectedRoute>
       <Workspace
+        currentUser={currentUser}
         initialProjectId={projectId}
         initialProject={initialProject}
         initialFiles={initialFiles}
       />
-    </ProtectedRoute>
   )
 }

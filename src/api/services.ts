@@ -3,14 +3,19 @@ export const apiServices = {
     users: 'users' as const,
     projects: 'projects' as const,
     files: 'files' as const,
+    snapshots: 'snapshots' as const,
     uploads: 'uploads' as const,
     media: 'media' as const,
     messages: 'messages' as const,
-    
+
     // AI services
     aiModels: 'ai-models' as const,
     aiService: 'ai-service' as const,
-    
+    aiStream: 'ai-stream' as const,
+    validatePrompt: 'validate-prompt' as const,
+    serverMonitor: 'server-monitor' as const,
+
     // File streaming service
-    fileStream: 'file-stream' as const
+    fileStream: 'file-stream' as const,
+    enhancePrompt: 'enhance-prompt' as const
 } as const;

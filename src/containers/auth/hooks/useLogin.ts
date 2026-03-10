@@ -6,7 +6,7 @@ import { LoginData } from '@/containers/auth/types'
 import { auth, googleProvider } from '@/services/auth/firebase'
 import { signIn } from '@/services/auth/signIn'
 import feathersClient from '@/services/featherClient'
-
+import { isRedirectError } from 'next/dist/client/components/redirect-error'
 
 type CustomError = { message?: string; code?: string }
 
@@ -79,6 +79,9 @@ export const useLogin = (): {
           userMeta: userCredential.user.providerData
         })
       } catch (err: unknown) {
+        if (isRedirectError(err)) {
+          throw err
+        }
         const error = err as { code?: string; message?: string }
         const message =
           error.code === 'auth/invalid-credential'
@@ -119,6 +122,9 @@ export const useLogin = (): {
         jwt: fres.accessToken
       })
     } catch (err: unknown) {
+      if (isRedirectError(err)) {
+        throw err
+      }
       const error = err as { code?: string; message?: string }
       const message =
         error.code === 'auth/popup-closed-by-user'

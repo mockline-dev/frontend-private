@@ -1,7 +1,9 @@
 'use server'
 
+import { appRoutes } from '@/config/appRoutes'
+import { UserData } from '@/containers/auth/types'
 import { cookies } from 'next/headers'
-import { UserData } from '@/types/auth'
+import { redirect } from 'next/navigation'
 
 interface SignInRes {
   error?: string
@@ -42,5 +44,5 @@ export async function signIn(data: UserData): Promise<SignInRes> {
     }
   )
 
-  return { error: undefined }
+  redirect(appRoutes.home.dashboard)
 }

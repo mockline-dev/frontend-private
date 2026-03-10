@@ -1,86 +1,74 @@
-'use client'
+'use client';
 
-import { Project, ProjectQuery, projectsService } from '@/services/api/projects'
-import { Params } from '@feathersjs/feathers'
-import { useEffect, useState } from 'react'
-import { toast } from 'sonner'
+import { fetchProjects } from '@/api/projects/fetchProjects';
+import { useRealtimeUpdates } from '@/hooks/useRealtimeUpdates';
+import { Project } from '@/services/api/projects';
+import { useCallback, useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 export function useAIProjects(initialProjects: Project[] = []) {
-  const [projects, setProjects] = useState<Project[]>(initialProjects)
-  const [loading, setLoading] = useState(initialProjects.length === 0)
-  const [error, setError] = useState<string | null>(null)
+    const [projects, setProjects] = useState<Project[]>(initialProjects);
+    const [loading, setLoading] = useState(initialProjects.length === 0);
 
-  const loadProjects = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      const result = await projectsService.find({
-        $sort: { createdAt: -1 },
-        $limit: 10
-      } as Params<ProjectQuery>)
-      setProjects(result?.data || [])
-    } catch (err) {
-      console.error('Failed to load projects:', err)
-      setError('Failed to load projects')
-      toast.error('Failed to load projects')
-    } finally {
-      setLoading(false)
-    }
-  }
+    const loadProjects = useCallback(async () => {
+        try {
+            setLoading(true);
+            const result = await fetchProjects({ query: { $sort: { createdAt: -1 }, $limit: 50 } });
+            if (result.success) {
+                setProjects(result.data?.data || []);
+            } else {
+                toast.error('Failed to load projects');
+            }
+        } catch {
+            toast.error('Failed to load projects');
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
-  useEffect(() => {
-    setProjects(initialProjects)
-  }, [initialProjects])
+    useEffect(() => {
+        if (initialProjects.length === 0) {
+            loadProjects();
+        }
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    if (initialProjects.length === 0) {
-      loadProjects()
-    }
-  }, [initialProjects.length])
+    const handleCreated = useCallback((project: Project) => {
+        setProjects((prev) => [project, ...prev]);
+    }, []);
 
-  // Listen for real-time project updates
-  useEffect(() => {
-    const unsubscribeCreated = projectsService.onCreated((project) => {
-      setProjects(prev => [project, ...prev])
-    })
+    const handlePatched = useCallback((project: Project) => {
+        setProjects((prev) => prev.map((p) => (p._id === project._id ? project : p)));
+    }, []);
 
-    const unsubscribePatched = projectsService.onPatched((project) => {
-      setProjects(prev => prev.map(p => p._id === project._id ? project : p))
-    })
+    const handleRemoved = useCallback((project: Project) => {
+        setProjects((prev) => prev.filter((p) => p._id !== project._id));
+    }, []);
 
-    const unsubscribeRemoved = projectsService.onRemoved((removedProject) => {
-      setProjects(prev => prev.filter(p => p._id !== removedProject._id))
-    })
+    useRealtimeUpdates<Project>('projects', 'created', handleCreated);
+    useRealtimeUpdates<Project>('projects', 'patched', handlePatched);
+    useRealtimeUpdates<Project>('projects', 'removed', handleRemoved);
 
-    return () => {
-      unsubscribeCreated()
-      unsubscribePatched()
-      unsubscribeRemoved()
-    }
-  }, [])
+    const getProjectStats = useCallback(
+        () => ({
+            total: projects.length,
+            ready: projects.filter((p) => p.status === 'ready').length,
+            generating: projects.filter((p) => p.status === 'generating').length
+        }),
+        [projects]
+    );
 
-  const getProjectStats = () => {
-    const totalProjects = projects.length
-    const readyProjects = projects.filter(p => p.status === 'ready').length
-    const generatingProjects = projects.filter(p => p.status === 'generating').length
+    const getRecentProjects = useCallback(
+        (limit = 3) => {
+            return projects.slice(0, limit);
+        },
+        [projects]
+    );
 
     return {
-      total: totalProjects,
-      ready: readyProjects,
-      generating: generatingProjects
-    }
-  }
-
-  const getRecentProjects = (limit: number = 3) => {
-    return projects.slice(0, limit)
-  }
-
-  return {
-    projects,
-    loading,
-    error,
-    loadProjects,
-    getProjectStats,
-    getRecentProjects
-  }
+        projects,
+        loading,
+        loadProjects,
+        getProjectStats,
+        getRecentProjects
+    };
 }

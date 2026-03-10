@@ -1,13 +1,12 @@
 'use server'
 
+import { appRoutes } from '@/config/appRoutes'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 
-import { appRoutes } from '@/config/appRoutes'
-
 export const signOut = async () => {
-  (await cookies()).delete('currentUser');
-  (await cookies()).delete('jwt');
+  ;(await cookies()).delete('currentUser')
+  ;(await cookies()).delete('jwt')
 
-  redirect(appRoutes.signOut)
+  redirect(appRoutes.auth.login)
 }

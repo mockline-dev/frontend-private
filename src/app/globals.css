@@ -44,25 +44,28 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+
   @keyframes fadeSlideIn {
-  to {
-    opacity: 1;
-    filter: blur(0px);
-    transform: translateY(0px);
+    to {
+      opacity: 1;
+      filter: blur(0px);
+      transform: translateY(0px);
     }
   }
+
   @keyframes slideRightIn {
-  to {
-    opacity: 1;
-    filter: blur(0px);
-    transform: translateX(0px);
+    to {
+      opacity: 1;
+      filter: blur(0px);
+      transform: translateX(0px);
     }
   }
+
   @keyframes testimonialIn {
-  to {
-    opacity: 1;
-    filter: blur(0px);
-    transform: translateY(0px) scale(1);
+    to {
+      opacity: 1;
+      filter: blur(0px);
+      transform: translateY(0px) scale(1);
     }
   }
 }
@@ -170,6 +173,7 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }
@@ -182,31 +186,70 @@
     transform: translateY(20px);
     animation: fadeSlideIn 0.6s ease-out forwards;
   }
-  
+
   .animate-slide-right {
     opacity: 0;
     filter: blur(10px);
     transform: translateX(-20px);
     animation: slideRightIn 0.8s ease-out forwards;
   }
-  
+
   .animate-testimonial {
     opacity: 0;
     filter: blur(10px);
     transform: translateY(20px) scale(0.9);
     animation: testimonialIn 0.6s ease-out forwards;
   }
-  
-  .animate-delay-100 { animation-delay: 100ms; }
-  .animate-delay-200 { animation-delay: 200ms; }
-  .animate-delay-300 { animation-delay: 300ms; }
-  .animate-delay-400 { animation-delay: 400ms; }
-  .animate-delay-500 { animation-delay: 500ms; }
-  .animate-delay-600 { animation-delay: 600ms; }
-  .animate-delay-700 { animation-delay: 700ms; }
-  .animate-delay-800 { animation-delay: 800ms; }
-  .animate-delay-900 { animation-delay: 900ms; }
-  .animate-delay-1000 { animation-delay: 1000ms; }
-  .animate-delay-1200 { animation-delay: 1200ms; }
-  .animate-delay-1400 { animation-delay: 1400ms; }
+
+  .animate-delay-100 {
+    animation-delay: 100ms;
+  }
+
+  .animate-delay-200 {
+    animation-delay: 200ms;
+  }
+
+  .animate-delay-300 {
+    animation-delay: 300ms;
+  }
+
+  .animate-delay-400 {
+    animation-delay: 400ms;
+  }
+
+  .animate-delay-500 {
+    animation-delay: 500ms;
+  }
+
+  .animate-delay-600 {
+    animation-delay: 600ms;
+  }
+
+  .animate-delay-700 {
+    animation-delay: 700ms;
+  }
+
+  .animate-delay-800 {
+    animation-delay: 800ms;
+  }
+
+  .animate-delay-900 {
+    animation-delay: 900ms;
+  }
+
+  .animate-delay-1000 {
+    animation-delay: 1000ms;
+  }
+
+  .animate-delay-1200 {
+    animation-delay: 1200ms;
+  }
+
+  .animate-delay-1400 {
+    animation-delay: 1400ms;
+  }
+}
+
+button {
+  @apply cursor-pointer;
 }

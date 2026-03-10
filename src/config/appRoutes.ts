@@ -6,7 +6,8 @@ export const appRoutes = {
   auth: {
     root: '/auth',
     login: '/auth/login',
-    signup: '/auth/signup'
+    signup: '/auth/signup',
+    resetPassword: '/auth/reset-password'
   },
   signOut: '/auth/sign-out'
 }

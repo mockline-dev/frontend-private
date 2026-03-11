@@ -32,9 +32,17 @@ export function ProjectCard({ project, onClick, onDelete, isDeleting = false, fo
     const progress = project.generationProgress?.percentage || 0;
 
     return (
-        <button
+        <div
+            role="button"
+            tabIndex={0}
             onClick={onClick}
-            className="group bg-card/80 backdrop-blur-sm hover:bg-card border border-border rounded-xl p-5 text-left transition-all shadow-sm relative w-full"
+            onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onClick();
+                }
+            }}
+            className="group bg-card/80 backdrop-blur-sm hover:bg-card border border-border rounded-xl p-5 text-left transition-all shadow-sm relative w-full cursor-pointer"
         >
             <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
@@ -64,18 +72,18 @@ export function ProjectCard({ project, onClick, onDelete, isDeleting = false, fo
                     )}
                 </div>
                 <div className="flex items-center gap-2 ml-4">
-                    <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                    <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                     <Button
                         onClick={onDelete}
                         disabled={isDeleting}
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 flex-shrink-0"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
                     >
                         {isDeleting ? <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-foreground" /> : <Trash2 className="w-3.5 h-3.5" />}
                     </Button>
                 </div>
             </div>
-        </button>
+        </div>
     );
 }

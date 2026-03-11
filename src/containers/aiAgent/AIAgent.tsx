@@ -43,7 +43,7 @@ export function AiAgent({ projectId, files = [], selectedFile, selectedFileConte
                 {messages.map((message) => (
                     <div key={message._id} className={`flex gap-2 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                         {message.role === 'assistant' && (
-                            <div className="w-6 h-6 bg-gradient-to-br from-violet-500 to-purple-600 rounded-md flex items-center justify-center shrink-0">
+                            <div className="w-6 h-6 bg-linear-to-br from-violet-500 to-purple-600 rounded-md flex items-center justify-center shrink-0">
                                 <span className="text-white text-xs font-bold">M</span>
                             </div>
                         )}
@@ -55,7 +55,7 @@ export function AiAgent({ projectId, files = [], selectedFile, selectedFileConte
 
                 {(isLoading || isStreaming) && (
                     <div className="flex gap-2">
-                        <div className="w-6 h-6 bg-gradient-to-br from-violet-500 to-purple-600 rounded-md flex items-center justify-center">
+                        <div className="w-6 h-6 bg-linear-to-br from-violet-500 to-purple-600 rounded-md flex items-center justify-center">
                             <span className="text-white text-xs font-bold">M</span>
                         </div>
                         <div className="bg-gray-100 rounded-lg px-3 py-2">

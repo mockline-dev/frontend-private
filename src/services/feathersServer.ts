@@ -15,8 +15,11 @@ export const createFeathersServerClient = async () => {
         messages: RestService;
         'ai-models': RestService;
         'ai-service': RestService;
+        'ai-stream': RestService;
         'file-stream': RestService;
         'enhance-prompt': RestService;
+        'infer-project-meta': RestService;
+        snapshots: RestService;
     };
 
     const app = feathers<ServiceTypes>();

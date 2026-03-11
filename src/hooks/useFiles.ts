@@ -1,6 +1,10 @@
 'use client';
 
-import feathersClient from '@/services/featherClient';
+import { createFile as createFileAction } from '@/api/files/createFile';
+import { deleteFile as deleteFileAction } from '@/api/files/deleteFile';
+import { fetchFileById } from '@/api/files/fetchFileById';
+import { fetchFiles } from '@/api/files/fetchFiles';
+import { updateFile as updateFileAction } from '@/api/files/updateFile';
 import { CreateFileData, FileQuery, ProjectFile, UpdateFileData } from '@/types/feathers';
 import { useCallback, useState } from 'react';
 import { useRealtimeUpdates } from './useRealtimeUpdates';
@@ -46,7 +50,7 @@ export function useFiles(initialFiles: ProjectFile[] = []): UseFilesReturn {
 
                 // Handle both paginated and non-paginated Feathers responses.
                 while (true) {
-                    const result = await feathersClient.service('files').find({
+                    const result = await fetchFiles({
                         query: {
                             projectId,
                             ...query,
@@ -92,9 +96,8 @@ export function useFiles(initialFiles: ProjectFile[] = []): UseFilesReturn {
             setError(null);
 
             try {
-                const file = await feathersClient.service('files').get(fileId);
+                const file = await fetchFileById({ id: fileId });
                 setCurrentFile(file);
-                return file;
             } catch (err) {
                 const message = err instanceof Error ? err.message : 'Failed to load file';
                 setError(message);
@@ -118,7 +121,7 @@ export function useFiles(initialFiles: ProjectFile[] = []): UseFilesReturn {
             setError(null);
 
             try {
-                const file = await feathersClient.service('files').create(data);
+                const file = await createFileAction(data);
                 setFiles((prev) => [...prev, file]);
                 return file;
             } catch (err) {
@@ -144,7 +147,7 @@ export function useFiles(initialFiles: ProjectFile[] = []): UseFilesReturn {
             setError(null);
 
             try {
-                const updated = await feathersClient.service('files').patch(fileId, data);
+                const updated = await updateFileAction({ id: fileId, data });
                 setFiles((prev) => prev.map((f) => (f._id === fileId ? updated : f)));
                 setCurrentFile((prev) => (prev?._id === fileId ? updated : prev));
                 return updated;
@@ -171,7 +174,7 @@ export function useFiles(initialFiles: ProjectFile[] = []): UseFilesReturn {
             setError(null);
 
             try {
-                await feathersClient.service('files').remove(fileId);
+                await deleteFileAction({ id: fileId });
                 setFiles((prev) => prev.filter((f) => f._id !== fileId));
                 setCurrentFile((prev) => (prev?._id === fileId ? null : prev));
             } catch (err) {

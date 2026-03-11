@@ -198,6 +198,7 @@ export interface StreamAIRequest {
     message: string;
     conversationHistory?: ConversationHistoryItem[];
     context?: AIStreamContext;
+    model?: string;
 }
 
 export interface StreamAIResponse {

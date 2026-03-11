@@ -1,6 +1,10 @@
 'use client';
 
-import feathersClient from '@/services/featherClient';
+import { createSnapshot as createSnapshotAction } from '@/api/snapshots/createSnapshot';
+import { deleteSnapshot as deleteSnapshotById } from '@/api/snapshots/deleteSnapshot';
+import { fetchSnapshotById } from '@/api/snapshots/fetchSnapshotById';
+import { fetchSnapshots } from '@/api/snapshots/fetchSnapshots';
+import { rollbackSnapshot } from '@/api/snapshots/rollbackSnapshot';
 import { CreateSnapshotData, RollbackResult, Snapshot, SnapshotQuery } from '@/types/feathers';
 import { useCallback, useState } from 'react';
 import { useRealtimeUpdates } from './useRealtimeUpdates';
@@ -17,6 +21,7 @@ export interface UseSnapshotsReturn {
     loadSnapshots: (projectId: string, query?: SnapshotQuery) => Promise<void>;
     loadSnapshot: (snapshotId: string) => Promise<void>;
     createSnapshot: (data: CreateSnapshotData) => Promise<Snapshot>;
+    _createSnapshot: (data: CreateSnapshotData) => Promise<Snapshot>;
     rollbackToSnapshot: (snapshotId: string) => Promise<RollbackResult>;
     deleteSnapshot: (snapshotId: string) => Promise<void>;
     refresh: (projectId: string) => Promise<void>;
@@ -42,7 +47,7 @@ export function useSnapshots(initialSnapshots: Snapshot[] = []): UseSnapshotsRet
             setError(null);
 
             try {
-                const result = await feathersClient.service('snapshots').find({
+                const result = await fetchSnapshots({
                     query: {
                         projectId,
                         ...query,
@@ -61,7 +66,6 @@ export function useSnapshots(initialSnapshots: Snapshot[] = []): UseSnapshotsRet
         [isBrowser]
     );
 
-    // Load a single snapshot
     const loadSnapshot = useCallback(
         async (snapshotId: string) => {
             if (!isBrowser) return;
@@ -70,9 +74,8 @@ export function useSnapshots(initialSnapshots: Snapshot[] = []): UseSnapshotsRet
             setError(null);
 
             try {
-                const snapshot = await feathersClient.service('snapshots').get(snapshotId);
-                setCurrentSnapshot(snapshot);
-                return snapshot;
+                const result = await fetchSnapshotById({ id: snapshotId });
+                setCurrentSnapshot(result);
             } catch (err) {
                 const message = err instanceof Error ? err.message : 'Failed to load snapshot';
                 setError(message);
@@ -96,7 +99,7 @@ export function useSnapshots(initialSnapshots: Snapshot[] = []): UseSnapshotsRet
             setError(null);
 
             try {
-                const snapshot = await feathersClient.service('snapshots').create(data);
+                const snapshot = await createSnapshotAction(data);
                 setSnapshots((prev) => [snapshot, ...prev]);
                 return snapshot;
             } catch (err) {
@@ -122,10 +125,8 @@ export function useSnapshots(initialSnapshots: Snapshot[] = []): UseSnapshotsRet
             setError(null);
 
             try {
-                const result = await feathersClient.service('snapshots').patch(snapshotId, {
-                    action: 'rollback'
-                });
-                return result as RollbackResult;
+                const result = await rollbackSnapshot({ id: snapshotId });
+                return result;
             } catch (err) {
                 const message = err instanceof Error ? err.message : 'Failed to rollback to snapshot';
                 setError(message);
@@ -149,7 +150,7 @@ export function useSnapshots(initialSnapshots: Snapshot[] = []): UseSnapshotsRet
             setError(null);
 
             try {
-                await feathersClient.service('snapshots').remove(snapshotId);
+                await deleteSnapshotById({ id: snapshotId });
                 setSnapshots((prev) => prev.filter((s) => s._id !== snapshotId));
                 setCurrentSnapshot((prev) => (prev?._id === snapshotId ? null : prev));
             } catch (err) {
@@ -198,6 +199,7 @@ export function useSnapshots(initialSnapshots: Snapshot[] = []): UseSnapshotsRet
         loadSnapshots,
         loadSnapshot,
         createSnapshot,
+        _createSnapshot: createSnapshot,
         rollbackToSnapshot,
         deleteSnapshot,
         refresh,

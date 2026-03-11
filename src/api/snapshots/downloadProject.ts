@@ -1,10 +1,10 @@
 'use server';
 
+import { filesService } from '@/services/api/files';
 import { projectsService } from '@/services/api/projects';
 import { createFeathersServerClient } from '@/services/feathersServer';
 import JSZip from 'jszip';
 import { fetchFileContent } from '../files/fetchFileContent';
-import { fetchFiles } from '../files/fetchFiles';
 
 export interface DownloadProjectParams {
     projectId: string;
@@ -18,20 +18,6 @@ export interface DownloadProjectData {
 export type DownloadProjectResponse = { success: true; data: DownloadProjectData } | { success: false; error: string };
 
 const MAX_FILE_FETCH_ATTEMPTS = 2;
-
-const toProjectRelativePath = (file: { key: string; name: string }): string => {
-    const key = file.key || '';
-    const projectsPrefix = 'projects/';
-
-    if (key.startsWith(projectsPrefix)) {
-        const firstSlashAfterProjectId = key.indexOf('/', projectsPrefix.length);
-        if (firstSlashAfterProjectId !== -1 && firstSlashAfterProjectId + 1 < key.length) {
-            return key.slice(firstSlashAfterProjectId + 1);
-        }
-    }
-
-    return file.name;
-};
 
 const getFileContentWithRetry = async (fileId: string, fileName: string): Promise<string> => {
     let lastError: string | null = null;
@@ -48,7 +34,7 @@ const getFileContentWithRetry = async (fileId: string, fileName: string): Promis
             lastError = error instanceof Error ? error.message : 'Unknown error';
         }
 
-        console.warn(`[downloadProject] Retry ${attempt}/${MAX_FILE_FETCH_ATTEMPTS} failed for ${fileName}`);
+        console.warn(`[downloadSnapshot] Retry ${attempt}/${MAX_FILE_FETCH_ATTEMPTS} failed for ${fileName}`);
     }
 
     throw new Error(lastError || `Failed to fetch content for ${fileName}`);
@@ -78,11 +64,8 @@ export const downloadProject = async ({ projectId }: DownloadProjectParams): Pro
         }
 
         // Fetch all files for project
-        const filesResult = await fetchFiles({ query: { projectId, $sort: { name: 1 }, $limit: 200 } });
-        const files = Array.isArray(filesResult) ? filesResult : filesResult?.data || [];
-        console.log('===============Files=====================');
-        console.log(files);
-        console.log('====================================');
+        const filesResult = await filesService.find({ projectId });
+        const files = filesResult.data || [];
 
         if (files.length === 0) {
             return { success: false, error: 'No files found for this project' };
@@ -95,11 +78,7 @@ export const downloadProject = async ({ projectId }: DownloadProjectParams): Pro
         for (const file of files) {
             try {
                 const fileContent = await getFileContentWithRetry(file._id, file.name);
-                const relativePath = toProjectRelativePath(file);
-                console.log('==========Relatuve Path==========================');
-                console.log(relativePath);
-                console.log('====================================');
-                zip.file(relativePath, fileContent);
+                zip.file(file.name, fileContent);
             } catch (error) {
                 console.error(`Error processing file ${file.name}:`, error);
                 failedFiles.push(file.name);

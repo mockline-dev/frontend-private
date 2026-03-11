@@ -1,25 +1,21 @@
 'use server';
 
 import { createFeathersServerClient } from '@/services/feathersServer';
+import { Project } from '@/types/feathers';
 import { apiServices } from '../services';
 
 export interface DeleteProjectParams {
     id: string;
 }
 
-export type DeleteProjectResponse = { success: true; data: any } | { success: false; error: string };
-
-export const deleteProject = async (params: DeleteProjectParams): Promise<DeleteProjectResponse> => {
+export const deleteProject = async (params: DeleteProjectParams): Promise<Project> => {
     try {
         const server = await createFeathersServerClient();
         const result = await server.service(apiServices.projects).remove(params.id);
-        return { success: true, data: JSON.parse(JSON.stringify(result)) };
+        return JSON.parse(JSON.stringify(result)) as Project;
     } catch (err: unknown) {
         console.error('Failed to delete project:', err);
         const error = err as { response?: { data?: { message?: string } }; message?: string };
-        return {
-            success: false,
-            error: error.response?.data?.message || error.message || 'Failed to delete project'
-        };
+        throw new Error(error.response?.data?.message || error.message || 'Failed to delete project');
     }
 };

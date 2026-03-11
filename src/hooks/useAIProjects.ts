@@ -14,11 +14,7 @@ export function useAIProjects(initialProjects: Project[] = []) {
         try {
             setLoading(true);
             const result = await fetchProjects({ query: { $sort: { createdAt: -1 }, $limit: 50 } });
-            if (result.success) {
-                setProjects(result.data?.data || []);
-            } else {
-                toast.error('Failed to load projects');
-            }
+            setProjects(Array.isArray(result) ? result : result.data || []);
         } catch {
             toast.error('Failed to load projects');
         } finally {

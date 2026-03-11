@@ -17,5 +17,6 @@ export const apiServices = {
 
     // File streaming service
     fileStream: 'file-stream' as const,
-    enhancePrompt: 'enhance-prompt' as const
+    enhancePrompt: 'enhance-prompt' as const,
+    inferProjectMeta: 'infer-project-meta' as const
 } as const;

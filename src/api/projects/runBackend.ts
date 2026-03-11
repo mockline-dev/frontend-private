@@ -5,7 +5,7 @@ import { createFeathersServerClient } from '@/services/feathersServer';
 import { exec } from 'child_process';
 import { existsSync } from 'fs';
 import { mkdir, readFile, rm, writeFile } from 'fs/promises';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { promisify } from 'util';
 import { fetchFileContent } from '../files/fetchFileContent';
 
@@ -47,9 +47,23 @@ export interface BackendRunResult {
 
 export type RunBackendResponse = { success: true; data: BackendRunResult } | { success: false; error: string; data?: BackendRunResult };
 
+const toProjectRelativePath = (file: { key: string; name: string }): string => {
+    const key = file.key || '';
+    const projectsPrefix = 'projects/';
+
+    if (key.startsWith(projectsPrefix)) {
+        const firstSlashAfterProjectId = key.indexOf('/', projectsPrefix.length);
+        if (firstSlashAfterProjectId !== -1 && firstSlashAfterProjectId + 1 < key.length) {
+            return key.slice(firstSlashAfterProjectId + 1);
+        }
+    }
+
+    return file.name;
+};
+
 export const runBackend = async ({ projectId }: RunBackendParams): Promise<RunBackendResponse> => {
     const tempDir = join(process.cwd(), '.temp-backend');
-    
+
     try {
         const server = await createFeathersServerClient();
 
@@ -62,7 +76,7 @@ export const runBackend = async ({ projectId }: RunBackendParams): Promise<RunBa
 
         // Get project files
         const filesResult = await server.service('files').find({
-            query: { projectId }
+            query: { projectId, $sort: { name: 1 }, $limit: 200 }
         });
 
         const files = filesResult.data || [];
@@ -72,22 +86,20 @@ export const runBackend = async ({ projectId }: RunBackendParams): Promise<RunBa
         }
 
         // Find main.py or server.py file
-        const mainFile = files.find((f: File) =>
-            f.name === 'main.py' ||
-            f.name === 'server.py' ||
-            f.name.endsWith('/main.py') ||
-            f.name.endsWith('/server.py')
-        );
+        const mainFile = files.find((f: File) => {
+            const relativePath = toProjectRelativePath(f);
+            return relativePath === 'main.py' || relativePath === 'server.py' || relativePath.endsWith('/main.py') || relativePath.endsWith('/server.py');
+        });
 
         if (!mainFile) {
             return { success: false, error: 'No main.py or server.py file found' };
         }
 
         // Check if requirements.txt exists
-        const requirementsFile = files.find((f: File) =>
-            f.name === 'requirements.txt' ||
-            f.name.endsWith('/requirements.txt')
-        );
+        const requirementsFile = files.find((f: File) => {
+            const relativePath = toProjectRelativePath(f);
+            return relativePath === 'requirements.txt' || relativePath.endsWith('/requirements.txt');
+        });
 
         // Validate LLM-generated files
         const validation = await validateGeneratedFiles(files, mainFile, requirementsFile);
@@ -101,7 +113,7 @@ export const runBackend = async ({ projectId }: RunBackendParams): Promise<RunBa
                     message: 'Validation failed',
                     project: {
                         name: project.name,
-                        description: project.description,
+                        description: project.description
                     },
                     validation
                 }
@@ -117,19 +129,21 @@ export const runBackend = async ({ projectId }: RunBackendParams): Promise<RunBa
             try {
                 // Use the new fetchFileContent function
                 const result = await fetchFileContent({ fileId: file._id });
-                
+
                 if (!result.success) {
                     throw new Error(result.error);
                 }
-                
+
                 const content = result.content;
-                
+
                 // Write file to temp directory
-                const filePath = join(tempDir, file.name);
+                const relativePath = toProjectRelativePath(file);
+                const filePath = join(tempDir, relativePath);
+                await mkdir(dirname(filePath), { recursive: true });
                 await writeFile(filePath, content, 'utf-8');
-                filesList.push(file.name);
-                
-                console.log(`Downloaded and wrote file: ${file.name}`);
+                filesList.push(relativePath);
+
+                console.log(`Downloaded and wrote file: ${relativePath}`);
             } catch (error) {
                 console.error(`Failed to download file ${file.name}:`, error);
                 validation.errors.push(`Failed to download ${file.name}: ${error}`);
@@ -143,7 +157,7 @@ export const runBackend = async ({ projectId }: RunBackendParams): Promise<RunBa
                 // Clean up requirements.txt - remove invalid entries and version constraints
                 const requirementsPath = join(tempDir, 'requirements.txt');
                 let requirementsContent = await readFile(requirementsPath, 'utf-8');
-                
+
                 // Remove version constraints and invalid entries
                 requirementsContent = requirementsContent
                     .split('\n')
@@ -162,11 +176,11 @@ export const runBackend = async ({ projectId }: RunBackendParams): Promise<RunBa
                     })
                     .filter((line: string | null): line is string => line !== null && line.length > 0)
                     .join('\n');
-                
+
                 // Write cleaned requirements back
                 await writeFile(requirementsPath, requirementsContent, 'utf-8');
                 console.log('Cleaned requirements.txt - removed version constraints');
-                
+
                 await execAsync('pip install -r requirements.txt', { cwd: tempDir });
                 console.log('Dependencies installed successfully');
             } else {
@@ -190,16 +204,14 @@ export const runBackend = async ({ projectId }: RunBackendParams): Promise<RunBa
 
         // Run the FastAPI server
         const port = 8000;
-        const moduleName = mainFile.name.replace('.py', '');
+        const mainRelativePath = toProjectRelativePath(mainFile);
+        const moduleName = mainRelativePath.replace(/\.py$/i, '').replace(/\//g, '.');
         console.log(`Starting FastAPI server on port ${port}...`);
-        
-        const serverProcess = exec(
-            `uvicorn ${moduleName}:app --host 0.0.0.0 --port ${port}`,
-            { cwd: tempDir }
-        );
+
+        const serverProcess = exec(`uvicorn ${moduleName}:app --host 0.0.0.0 --port ${port}`, { cwd: tempDir });
 
         // Wait a bit for server to start
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await new Promise((resolve) => setTimeout(resolve, 3000));
 
         // Check if server is running
         let serverRunning = false;
@@ -237,7 +249,7 @@ export const runBackend = async ({ projectId }: RunBackendParams): Promise<RunBa
             message: 'Backend server started successfully',
             project: {
                 name: project.name,
-                description: project.description,
+                description: project.description
             },
             files: {
                 total: files.length,
@@ -258,7 +270,6 @@ export const runBackend = async ({ projectId }: RunBackendParams): Promise<RunBa
 
         console.log('Backend server started successfully:', result);
         return { success: true, data: result };
-
     } catch (err: unknown) {
         console.error('Failed to run backend:', err);
         await cleanupTempDir(tempDir);
@@ -300,22 +311,26 @@ async function validateGeneratedFiles(
 
     // Check for essential FastAPI files
     const essentialFiles = ['main.py', 'server.py'];
-    const hasEssentialFile = files.some(f => essentialFiles.includes(f.name));
-    
+    const hasEssentialFile = files.some((f) => {
+        const relativePath = toProjectRelativePath(f);
+        return essentialFiles.includes(relativePath) || essentialFiles.some((fileName) => relativePath.endsWith(`/${fileName}`));
+    });
+
     if (!hasEssentialFile) {
         errors.push('Missing essential FastAPI files');
     }
 
     // Check file sizes (LLM might generate empty or very small files)
     for (const file of files) {
+        const relativePath = toProjectRelativePath(file);
         if (file.size === 0) {
             errors.push(`File ${file.name} is empty`);
-        } else if (file.size < 50 && file.name.endsWith('.py')) {
-            errors.push(`File ${file.name} is too small (${file.size} bytes), might be incomplete`);
+        } else if (file.size < 50 && relativePath.endsWith('.py')) {
+            errors.push(`File ${relativePath} is too small (${file.size} bytes), might be incomplete`);
         }
     }
 
-    const filesValid = mainFileValid && errors.filter(e => !e.includes('requirements.txt')).length === 0;
+    const filesValid = mainFileValid && errors.filter((e) => !e.includes('requirements.txt')).length === 0;
 
     return {
         filesValid,

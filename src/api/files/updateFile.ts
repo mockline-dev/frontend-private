@@ -1,26 +1,22 @@
 'use server';
 
 import { createFeathersServerClient } from '@/services/feathersServer';
+import { ProjectFile, UpdateFileData } from '@/types/feathers';
 import { apiServices } from '../services';
 
 export interface UpdateFileParams {
     id: string;
-    data: Record<string, unknown>;
+    data: UpdateFileData;
 }
 
-export type UpdateFileResponse = { success: true; data: any } | { success: false; error: string };
-
-export const updateFile = async (params: UpdateFileParams): Promise<UpdateFileResponse> => {
+export const updateFile = async (params: UpdateFileParams): Promise<ProjectFile> => {
     try {
         const server = await createFeathersServerClient();
         const result = await server.service(apiServices.files).patch(params.id, params.data);
-        return { success: true, data: JSON.parse(JSON.stringify(result)) };
+        return JSON.parse(JSON.stringify(result)) as ProjectFile;
     } catch (err: unknown) {
         console.error('Failed to update file:', err);
         const error = err as { response?: { data?: { message?: string } }; message?: string };
-        return {
-            success: false,
-            error: error.response?.data?.message || error.message || 'Failed to update file'
-        };
+        throw new Error(error.response?.data?.message || error.message || 'Failed to update file');
     }
 };

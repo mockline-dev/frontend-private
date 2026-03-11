@@ -1,5 +1,10 @@
 'use client';
 
+import { createProject as createProjectAction } from '@/api/projects/createProject';
+import { deleteProject as deleteProjectAction } from '@/api/projects/deleteProject';
+import { fetchProjectById } from '@/api/projects/fetchProjectById';
+import { fetchProjects } from '@/api/projects/fetchProjects';
+import { updateProject as updateProjectAction } from '@/api/projects/updateProject';
 import feathersClient from '@/services/featherClient';
 import { CreateProjectData, ProgressEventData, Project, ProjectQuery } from '@/types/feathers';
 import { useCallback, useState } from 'react';
@@ -40,9 +45,7 @@ export function useProjects(initialProjects: Project[] = []): UseProjectsReturn 
             setError(null);
 
             try {
-                const result = await feathersClient.service('projects').find({
-                    query: query || { $sort: { createdAt: -1 } }
-                });
+                const result = await fetchProjects({ query: query || { $sort: { createdAt: -1 } } });
                 setProjects(Array.isArray(result) ? result : result.data || []);
             } catch (err) {
                 const message = err instanceof Error ? err.message : 'Failed to load projects';
@@ -64,9 +67,8 @@ export function useProjects(initialProjects: Project[] = []): UseProjectsReturn 
             setError(null);
 
             try {
-                const project = await feathersClient.service('projects').get(projectId);
+                const project = await fetchProjectById({ id: projectId });
                 setCurrentProject(project);
-                return project;
             } catch (err) {
                 const message = err instanceof Error ? err.message : 'Failed to load project';
                 setError(message);
@@ -90,7 +92,7 @@ export function useProjects(initialProjects: Project[] = []): UseProjectsReturn 
             setError(null);
 
             try {
-                const project = await feathersClient.service('projects').create(data);
+                const project = await createProjectAction(data);
                 setProjects((prev) => [project, ...prev]);
                 setCurrentProject(project);
                 return project;
@@ -117,7 +119,7 @@ export function useProjects(initialProjects: Project[] = []): UseProjectsReturn 
             setError(null);
 
             try {
-                const updated = await feathersClient.service('projects').patch(projectId, data);
+                const updated = await updateProjectAction({ id: projectId, data });
                 setProjects((prev) => prev.map((p) => (p._id === projectId ? updated : p)));
                 setCurrentProject((prev) => (prev?._id === projectId ? updated : prev));
                 return updated;
@@ -144,7 +146,7 @@ export function useProjects(initialProjects: Project[] = []): UseProjectsReturn 
             setError(null);
 
             try {
-                await feathersClient.service('projects').remove(projectId);
+                await deleteProjectAction({ id: projectId });
                 setProjects((prev) => prev.filter((p) => p._id !== projectId));
                 setCurrentProject((prev) => (prev?._id === projectId ? null : prev));
             } catch (err) {

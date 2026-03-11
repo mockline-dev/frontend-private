@@ -1,6 +1,7 @@
 'use client';
 
 import { enhancePrompt } from '@/api/enhancePrompt/enhancePrompt';
+import { inferProjectMeta } from '@/api/inferProjectMeta/inferProjectMeta';
 import { defaultAiModel } from '@/config/environment';
 import { useProjectCreation } from '@/hooks/useProjectCreation';
 import { useRouter } from 'next/navigation';
@@ -11,11 +12,14 @@ interface UseInitialScreenOptions {
     onProjectCreated?: (projectId: string) => void;
 }
 
+type PreparationPhase = 'idle' | 'enhancing' | 'inferring-meta';
+
 export function useInitialScreen(options?: UseInitialScreenOptions) {
     const router = useRouter();
     const [promptValue, setPromptValue] = useState('');
     const [enhancedPrompt, setEnhancedPrompt] = useState('');
     const [enhanceLoading, setEnhanceLoading] = useState(false);
+    const [preparationPhase, setPreparationPhase] = useState<PreparationPhase>('idle');
 
     const {
         state: creationState,
@@ -47,19 +51,35 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
     const handleSendPrompt = useCallback(
         async (prompt: string) => {
             const normalizedPrompt = prompt.trim();
-            if (!normalizedPrompt || isCreating) {
+            if (!normalizedPrompt || isCreating || preparationPhase !== 'idle') {
                 return;
             }
 
-            await createProject({
-                name: normalizedPrompt.length > 60 ? `${normalizedPrompt.slice(0, 57)}...` : normalizedPrompt,
-                description: normalizedPrompt,
-                framework: 'fast-api',
-                language: 'python',
-                model: defaultAiModel
-            });
+            try {
+                setPreparationPhase('enhancing');
+                const enhanced = await enhancePrompt({ userPrompt: normalizedPrompt });
+                const enhancedText = enhanced.enhancedPrompt?.trim() || normalizedPrompt;
+                setEnhancedPrompt(enhancedText);
+
+                setPreparationPhase('inferring-meta');
+                const metadata = await inferProjectMeta({ enhancedPrompt: enhancedText });
+
+                setPreparationPhase('idle');
+                await createProject({
+                    name: metadata.name?.trim() || (normalizedPrompt.length > 60 ? `${normalizedPrompt.slice(0, 57)}...` : normalizedPrompt),
+                    description: metadata.description?.trim() || enhancedText,
+                    framework: 'fast-api',
+                    language: 'python',
+                    model: defaultAiModel
+                });
+            } catch (error) {
+                const message = error instanceof Error ? error.message : 'Failed to create project';
+                toast.error(message);
+            } finally {
+                setPreparationPhase('idle');
+            }
         },
-        [createProject, isCreating]
+        [createProject, isCreating, preparationPhase]
     );
 
     useEffect(() => {
@@ -76,6 +96,9 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
         handleEnhancePrompt,
         handleSendPrompt,
         creationState,
-        isCreating
+        isCreating,
+        preparationPhase,
+        isPreprocessing: preparationPhase !== 'idle',
+        showMorphLoading: isCreating && preparationPhase === 'idle'
     };
 }

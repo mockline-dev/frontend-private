@@ -1,22 +1,26 @@
 'use server';
 
 import { createFeathersServerClient } from '@/services/feathersServer';
-import { Project } from '@/types/feathers';
 import { apiServices } from '../services';
 
 export interface UpdateProjectParams {
     id: string;
-    data: Partial<Project>;
+    data: Record<string, unknown>;
 }
 
-export const updateProject = async (params: UpdateProjectParams): Promise<Project> => {
+export type UpdateProjectResponse = { success: true; data: any } | { success: false; error: string };
+
+export const updateProject = async (params: UpdateProjectParams): Promise<UpdateProjectResponse> => {
     try {
         const server = await createFeathersServerClient();
         const result = await server.service(apiServices.projects).patch(params.id, params.data);
-        return JSON.parse(JSON.stringify(result)) as Project;
+        return { success: true, data: JSON.parse(JSON.stringify(result)) };
     } catch (err: unknown) {
         console.error('Failed to update project:', err);
         const error = err as { response?: { data?: { message?: string } }; message?: string };
-        throw new Error(error.response?.data?.message || error.message || 'Failed to update project');
+        return {
+            success: false,
+            error: error.response?.data?.message || error.message || 'Failed to update project'
+        };
     }
 };

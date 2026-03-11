@@ -2,7 +2,7 @@
 
 import { fetchProjectById } from '@/api/projects/fetchProjectById';
 import { useRealtimeUpdates } from '@/hooks/useRealtimeUpdates';
-import { Project } from '@/services/api/projects';
+import { Project } from '@/types/feathers';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -10,20 +10,17 @@ export type AIProject = Project;
 
 export function useAIProject(projectId?: string, initialProject: Project | null = null) {
     const [project, setProject] = useState<Project | null>(initialProject);
-    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         if (!projectId) return;
         if (initialProject?._id === projectId) return;
 
-        setLoading(true);
         fetchProjectById({ id: projectId })
             .then((result) => {
-                if (result.success) setProject(result.data);
-                else toast.error('Failed to load project');
+                setProject(result);
             })
             .catch(() => toast.error('Failed to load project'))
-            .finally(() => setLoading(false));
+            .finally(() => undefined);
     }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handlePatched = useCallback((updated: Project) => {
@@ -31,6 +28,8 @@ export function useAIProject(projectId?: string, initialProject: Project | null 
     }, []);
 
     useRealtimeUpdates<Project>('projects', 'patched', handlePatched, (p) => p._id === projectId);
+
+    const loading = Boolean(projectId && !project);
 
     return { project, loading };
 }

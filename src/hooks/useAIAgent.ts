@@ -1,11 +1,12 @@
 'use client';
 
-import { defaultAiModel, getApiUrl } from '@/config/environment';
+import { createAIStream } from '@/api/aiStream/createAIStream';
+import { createUpload } from '@/api/uploads/createUpload';
+import { defaultAiModel } from '@/config/environment';
 import { type FileUpdate } from '@/containers/workspace/components/FileUpdatePreview';
 import { useRealtimeUpdates, useSocketEvent } from '@/hooks/useRealtimeUpdates';
 import { filesService, type File as FileType } from '@/services/api/files';
 import { messagesService, type Message } from '@/services/api/messages';
-import feathersClient from '@/services/featherClient';
 import { validatePrompt } from '@/utils/promptValidation';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -57,17 +58,8 @@ function toId(value: unknown): string {
 }
 
 async function validatePromptWithAI(prompt: string) {
-    try {
-        const response = await fetch(getApiUrl('/api/validate-prompt'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt })
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return await response.json();
-    } catch {
-        return validatePrompt(prompt);
-    }
+    // Local validation prevents noisy 404s from optional external endpoints.
+    return validatePrompt(prompt);
 }
 
 export function useAIAgent(
@@ -166,11 +158,11 @@ export function useAIAgent(
 
                 const projectContext = {
                     files: files.map((f) => f.name),
-                    selectedFile: selectedFile ?? null,
-                    selectedContent: selectedFileContent ?? null
+                    ...(selectedFile ? { selectedFile } : {}),
+                    ...(selectedFileContent ? { selectedContent: selectedFileContent } : {})
                 };
 
-                await feathersClient.service('ai-stream').create({
+                await createAIStream({
                     projectId: currentProjectId,
                     message: conversationMessages[conversationMessages.length - 1]?.content || '',
                     conversationHistory: conversationMessages.slice(0, -1),
@@ -249,7 +241,7 @@ export function useAIAgent(
                     }
 
                     const key = `projects/${projectId}/${update.filename}`;
-                    await feathersClient.service('uploads').create({ key, content: update.content, contentType: 'text/plain', projectId });
+                    await createUpload({ key, content: update.content, contentType: 'text/plain', projectId });
 
                     const existing = files.find((f) => f.name === update.filename);
                     if (existing) {

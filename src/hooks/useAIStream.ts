@@ -1,7 +1,8 @@
 'use client';
 
+import { createAIStream } from '@/api/aiStream/createAIStream';
 import feathersClient from '@/services/featherClient';
-import { AIFileUpdate, AIStreamChunk, AIStreamContext, AIStreamFileUpdates, ConversationHistoryItem, StreamAIRequest, StreamAIResponse } from '@/types/feathers';
+import { AIFileUpdate, AIStreamChunk, AIStreamContext, AIStreamFileUpdates, ConversationHistoryItem, StreamAIRequest } from '@/types/feathers';
 import { useCallback, useEffect, useState } from 'react';
 
 export interface UseAIStreamReturn {
@@ -47,7 +48,7 @@ export function useAIStream(): UseAIStreamReturn {
             setMessageId(null);
 
             try {
-                const result = (await feathersClient.service('ai-stream').create(request)) as StreamAIResponse;
+                const result = await createAIStream(request);
                 // The response might contain initial message ID
                 if (result && result.messageId) {
                     setMessageId(result.messageId);

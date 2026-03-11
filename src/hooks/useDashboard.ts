@@ -54,8 +54,7 @@ export function useDashboard(initialProjects: Project[] = []): UseDashboardRetur
 
         setDeletingProjectId(projectId);
         try {
-            const result = await deleteProjectApi({ id: projectId });
-            if (!result.success) throw new Error(result.error);
+            await deleteProjectApi({ id: projectId });
             toast.success(`Deleted: ${projectName}`);
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Failed to delete project');

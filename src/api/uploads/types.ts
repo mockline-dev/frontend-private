@@ -5,7 +5,9 @@ export interface Upload {
 
 export interface UploadCreateData {
     key: string;
+    content: string;
     contentType: string;
+    projectId?: string;
 }
 
 export interface UploadUpdateData {

@@ -1,6 +1,10 @@
 'use client';
 
-import feathersClient from '@/services/featherClient';
+import { createMessage as createMessageAction } from '@/api/messages/createMessage';
+import { deleteMessage as deleteMessageAction } from '@/api/messages/deleteMessage';
+import { fetchMessageById } from '@/api/messages/fetchMessageById';
+import { fetchMessages } from '@/api/messages/fetchMessages';
+import { updateMessage as updateMessageAction } from '@/api/messages/updateMessage';
 import { ConversationHistoryItem, CreateMessageData, Message, MessageQuery, UpdateMessageData } from '@/types/feathers';
 import { useCallback, useState } from 'react';
 import { useRealtimeUpdates } from './useRealtimeUpdates';
@@ -41,7 +45,7 @@ export function useMessages(initialMessages: Message[] = []): UseMessagesReturn 
             setError(null);
 
             try {
-                const result = await feathersClient.service('messages').find({
+                const result = await fetchMessages({
                     query: {
                         projectId,
                         ...query,
@@ -69,9 +73,8 @@ export function useMessages(initialMessages: Message[] = []): UseMessagesReturn 
             setError(null);
 
             try {
-                const message = await feathersClient.service('messages').get(messageId);
+                const message = await fetchMessageById({ id: messageId });
                 setCurrentMessage(message);
-                return message;
             } catch (err) {
                 const messageError = err instanceof Error ? err.message : 'Failed to load message';
                 setError(messageError);
@@ -95,7 +98,7 @@ export function useMessages(initialMessages: Message[] = []): UseMessagesReturn 
             setError(null);
 
             try {
-                const message = await feathersClient.service('messages').create(data);
+                const message = await createMessageAction(data);
                 setMessages((prev) => [...prev, message]);
                 return message;
             } catch (err) {
@@ -121,7 +124,7 @@ export function useMessages(initialMessages: Message[] = []): UseMessagesReturn 
             setError(null);
 
             try {
-                const updated = await feathersClient.service('messages').patch(messageId, data);
+                const updated = await updateMessageAction({ id: messageId, data });
                 setMessages((prev) => prev.map((m) => (m._id === messageId ? updated : m)));
                 setCurrentMessage((prev) => (prev?._id === messageId ? updated : prev));
                 return updated;
@@ -148,7 +151,7 @@ export function useMessages(initialMessages: Message[] = []): UseMessagesReturn 
             setError(null);
 
             try {
-                await feathersClient.service('messages').remove(messageId);
+                await deleteMessageAction({ id: messageId });
                 setMessages((prev) => prev.filter((m) => m._id !== messageId));
                 setCurrentMessage((prev) => (prev?._id === messageId ? null : prev));
             } catch (err) {
@@ -177,7 +180,7 @@ export function useMessages(initialMessages: Message[] = []): UseMessagesReturn 
             if (!isBrowser) return [];
 
             try {
-                const result = await feathersClient.service('messages').find({
+                const result = await fetchMessages({
                     query: {
                         projectId,
                         $sort: { createdAt: 1 }

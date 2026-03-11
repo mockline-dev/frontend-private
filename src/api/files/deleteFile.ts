@@ -1,25 +1,21 @@
 'use server';
 
 import { createFeathersServerClient } from '@/services/feathersServer';
+import { ProjectFile } from '@/types/feathers';
 import { apiServices } from '../services';
 
 export interface DeleteFileParams {
     id: string;
 }
 
-export type DeleteFileResponse = { success: true; data: any } | { success: false; error: string };
-
-export const deleteFile = async (params: DeleteFileParams): Promise<DeleteFileResponse> => {
+export const deleteFile = async (params: DeleteFileParams): Promise<ProjectFile> => {
     try {
         const server = await createFeathersServerClient();
         const result = await server.service(apiServices.files).remove(params.id);
-        return { success: true, data: JSON.parse(JSON.stringify(result)) };
+        return JSON.parse(JSON.stringify(result)) as ProjectFile;
     } catch (err: unknown) {
         console.error('Failed to delete file:', err);
         const error = err as { response?: { data?: { message?: string } }; message?: string };
-        return {
-            success: false,
-            error: error.response?.data?.message || error.message || 'Failed to delete file'
-        };
+        throw new Error(error.response?.data?.message || error.message || 'Failed to delete file');
     }
 };

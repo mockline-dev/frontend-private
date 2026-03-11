@@ -70,10 +70,6 @@ export function Dashboard({ currentUser, initialProjects = [] }: DashboardProps)
         router.push('/');
     };
 
-    const handleNavigate = (page: 'dashboard' | 'workspace' | 'initial') => {
-        router.push(page === 'dashboard' ? '/dashboard' : '/workspace');
-    };
-
     const currentHour = new Date().getHours();
     const greeting = currentHour < 12 ? 'Good morning' : currentHour < 18 ? 'Good afternoon' : 'Good evening';
     const userName = currentUser ? currentUser.firstName || 'User' : 'User';

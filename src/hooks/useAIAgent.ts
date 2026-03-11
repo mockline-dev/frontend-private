@@ -44,6 +44,18 @@ interface AIStreamFileUpdatesEvent {
 
 const STREAMING_MESSAGE_ID = '__mocky_streaming__';
 
+function toId(value: unknown): string {
+    if (!value) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'object' && value !== null) {
+        const maybe = value as { _id?: unknown; id?: unknown; toString?: () => string };
+        if (typeof maybe._id === 'string') return maybe._id;
+        if (typeof maybe.id === 'string') return maybe.id;
+        if (typeof maybe.toString === 'function') return maybe.toString();
+    }
+    return String(value);
+}
+
 async function validatePromptWithAI(prompt: string) {
     try {
         const response = await fetch(getApiUrl('/api/validate-prompt'), {
@@ -94,14 +106,14 @@ export function useAIAgent(
         setMessages((prev) => prev.map((m) => (m._id === message._id ? message : m)));
     }, []);
 
-    const msgFilter = useCallback((m: Message) => m.projectId === projectId, [projectId]);
+    const msgFilter = useCallback((m: Message) => toId(m.projectId) === toId(projectId), [projectId]);
 
     useRealtimeUpdates<Message>('messages', 'created', handleMessageCreated, msgFilter);
     useRealtimeUpdates<Message>('messages', 'patched', handleMessagePatched, msgFilter);
 
     const handleStreamChunk = useCallback(
         (chunk: AIStreamChunkEvent) => {
-            if (chunk.projectId !== projectId) return;
+            if (toId(chunk.projectId) !== toId(projectId)) return;
 
             setIsStreaming(!chunk.done);
 
@@ -138,7 +150,7 @@ export function useAIAgent(
 
     const handleStreamFileUpdates = useCallback(
         (payload: AIStreamFileUpdatesEvent) => {
-            if (payload.projectId !== projectId) return;
+            if (toId(payload.projectId) !== toId(projectId)) return;
             setFileUpdates(payload.updates || []);
         },
         [projectId]
@@ -165,6 +177,13 @@ export function useAIAgent(
                     context: projectContext,
                     model: defaultAiModel
                 });
+
+                // Consistency fallback: refresh messages after stream completes
+                // so UI stays correct even if a realtime event was missed.
+                const refreshed = await messagesService.find({ projectId: currentProjectId, $sort: { createdAt: 1 } });
+                setMessages(refreshed.data);
+                setMessages((prev) => prev.filter((m) => m._id !== STREAMING_MESSAGE_ID));
+                setIsStreaming(false);
             } catch (error) {
                 setMessages((prev) => prev.filter((m) => m._id !== STREAMING_MESSAGE_ID));
                 setIsStreaming(false);

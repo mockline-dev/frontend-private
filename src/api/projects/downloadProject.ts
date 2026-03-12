@@ -58,7 +58,6 @@ export const downloadProject = async ({ projectId }: DownloadProjectParams): Pro
     try {
         const server = await createFeathersServerClient();
 
-        // Get authenticated user from Feathers
         const auth = await server.get('authentication');
         const userId = auth?.user?._id;
 
@@ -66,29 +65,22 @@ export const downloadProject = async ({ projectId }: DownloadProjectParams): Pro
             return { success: false, error: 'Unauthorized' };
         }
 
-        // Fetch project metadata
         const project = await projectsService.get(projectId);
         if (!project) {
             return { success: false, error: 'Project not found' };
         }
 
-        // Verify ownership
         if (project.userId !== userId) {
             return { success: false, error: 'You do not have permission to access this project' };
         }
 
-        // Fetch all files for project
         const filesResult = await fetchFiles({ query: { projectId, $sort: { name: 1 }, $limit: 200 } });
         const files = Array.isArray(filesResult) ? filesResult : filesResult?.data || [];
-        console.log('===============Files=====================');
-        console.log(files);
-        console.log('====================================');
 
         if (files.length === 0) {
             return { success: false, error: 'No files found for this project' };
         }
 
-        // Create zip file
         const zip = new JSZip();
         const failedFiles: string[] = [];
 
@@ -96,9 +88,6 @@ export const downloadProject = async ({ projectId }: DownloadProjectParams): Pro
             try {
                 const fileContent = await getFileContentWithRetry(file._id, file.name);
                 const relativePath = toProjectRelativePath(file);
-                console.log('==========Relatuve Path==========================');
-                console.log(relativePath);
-                console.log('====================================');
                 zip.file(relativePath, fileContent);
             } catch (error) {
                 console.error(`Error processing file ${file.name}:`, error);
@@ -113,7 +102,6 @@ export const downloadProject = async ({ projectId }: DownloadProjectParams): Pro
             };
         }
 
-        // Generate zip file
         const zipBuffer = await zip.generateAsync({ type: 'arraybuffer' });
         const zipBase64 = Buffer.from(zipBuffer).toString('base64');
         const filename = `${project.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.zip`;

@@ -1,10 +1,11 @@
 'use client';
 
 import { createAIStream } from '@/api/aiStream/createAIStream';
+import { fetchFileContent } from '@/api/files/fetchFileContent';
 import { createUpload } from '@/api/uploads/createUpload';
 import { defaultAiModel } from '@/config/environment';
 import { type FileUpdate } from '@/containers/workspace/components/FileUpdatePreview';
-import { useRealtimeUpdates, useSocketEvent } from '@/hooks/useRealtimeUpdates';
+import { useRealtimeUpdates } from '@/hooks/useRealtimeUpdates';
 import { filesService, type File as FileType } from '@/services/api/files';
 import { messagesService, type Message } from '@/services/api/messages';
 import { validatePrompt } from '@/utils/promptValidation';
@@ -18,17 +19,41 @@ interface StreamMessage {
     content: string;
 }
 
+const STREAM_POLL_INTERVAL_MS = 1200;
+const STREAM_POLL_TIMEOUT_MS = 90000;
+const INITIAL_MESSAGES_LIMIT = 10;
+const OLDER_MESSAGES_BATCH_SIZE = 50;
+const FILE_UPDATE_PATTERN =
+    /(?:^|\n)\s*\*{0,2}\s*FILE_UPDATE\s*:\s*(.+?)\s*\*{0,2}\s*\n\s*\*{0,2}\s*ACTION\s*:\s*(create|modify|delete)\s*\*{0,2}\s*\n\s*\*{0,2}\s*DESCRIPTION\s*:\s*(.+?)\s*\*{0,2}\s*\n```([\w+-]*)\n([\s\S]*?)```/gi;
+const SEARCH_REPLACE_BLOCK_PATTERN = /<<<<<<<\s*SEARCH\s*\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>>\s*REPLACE/g;
+
+interface SearchReplaceBlock {
+    search: string;
+    replace: string;
+}
+
 export interface UseAIAgentReturn {
     messages: Message[];
+    hasOlderMessages: boolean;
+    isLoadingOlderMessages: boolean;
     input: string;
     setInput: (value: string) => void;
     isLoading: boolean;
     isStreaming: boolean;
+    isApplyingUpdates: boolean;
+    applyingUpdateKeys: string[];
     fileUpdates: FileUpdate[];
     handleSubmit: (e: React.FormEvent) => void;
+    loadOlderMessages: () => Promise<void>;
     handleAcceptUpdate: (update: FileUpdate) => Promise<void>;
     handleRejectUpdate: (update: FileUpdate) => void;
     handleAcceptAllUpdates: () => Promise<void>;
+}
+
+interface FileAppliedEvent {
+    action: FileUpdate['action'];
+    filename: string;
+    content?: string;
 }
 
 interface AIStreamChunkEvent {
@@ -57,6 +82,159 @@ function toId(value: unknown): string {
     return String(value);
 }
 
+function normalizePath(value: string): string {
+    return value.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\/+/, '').trim();
+}
+
+function parseFileUpdatesFromContent(content: string): FileUpdate[] {
+    if (!content) return [];
+
+    const updates: FileUpdate[] = [];
+    const normalized = content.replace(/\r\n/g, '\n');
+
+    const clean = (value: string) =>
+        value
+            .trim()
+            .replace(/^\*+|\*+$/g, '')
+            .replace(/^`+|`+$/g, '')
+            .trim();
+
+    let match: RegExpExecArray | null;
+    while ((match = FILE_UPDATE_PATTERN.exec(normalized)) !== null) {
+        const rawFilename = clean(match[1] ?? '');
+        const filename = normalizePath(rawFilename.replace(/^\[\s*/, '').replace(/\s*\]$/, ''));
+        const action = clean(match[2] ?? '').toLowerCase() as FileUpdate['action'];
+        const description = clean(match[3] ?? '');
+        const language = clean(match[4] ?? '') || 'text';
+        const nextContent = match[5] ?? '';
+
+        if (!filename) continue;
+
+        updates.push({
+            filename,
+            action,
+            description,
+            language,
+            content: nextContent
+        });
+    }
+
+    return updates;
+}
+
+function mergeFileUpdates(existing: FileUpdate[], incoming: FileUpdate[]): FileUpdate[] {
+    if (incoming.length === 0) return existing;
+
+    const map = new Map<string, FileUpdate>();
+
+    for (const update of existing) {
+        map.set(`${update.action}:${normalizePath(update.filename)}`, update);
+    }
+
+    for (const update of incoming) {
+        map.set(`${update.action}:${normalizePath(update.filename)}`, update);
+    }
+
+    return Array.from(map.values());
+}
+
+function parseSearchReplaceBlocks(content: string): SearchReplaceBlock[] {
+    if (!content) return [];
+
+    const blocks: SearchReplaceBlock[] = [];
+    const normalized = content.replace(/\r\n/g, '\n');
+    let match: RegExpExecArray | null;
+
+    while ((match = SEARCH_REPLACE_BLOCK_PATTERN.exec(normalized)) !== null) {
+        blocks.push({
+            search: match[1] ?? '',
+            replace: match[2] ?? ''
+        });
+    }
+
+    SEARCH_REPLACE_BLOCK_PATTERN.lastIndex = 0;
+    return blocks;
+}
+
+function applySearchReplaceBlocks(original: string, blocks: SearchReplaceBlock[]): string {
+    let result = original;
+
+    for (const block of blocks) {
+        if (!block.search) {
+            throw new Error('Invalid patch: SEARCH block cannot be empty.');
+        }
+
+        const firstIndex = result.indexOf(block.search);
+        if (firstIndex === -1) {
+            throw new Error('Target snippet for patch was not found in the current file.');
+        }
+
+        const lastIndex = result.lastIndexOf(block.search);
+        if (firstIndex !== lastIndex) {
+            throw new Error('Target snippet appears multiple times. Patch must be unambiguous.');
+        }
+
+        result = `${result.slice(0, firstIndex)}${block.replace}${result.slice(firstIndex + block.search.length)}`;
+    }
+
+    return result;
+}
+
+async function resolveUpdatedContentForModify(update: FileUpdate, existing: FileType): Promise<string> {
+    const patchBlocks = parseSearchReplaceBlocks(update.content);
+    if (patchBlocks.length === 0) {
+        throw new Error('Unsafe modify update: expected SEARCH/REPLACE blocks for partial edit.');
+    }
+
+    const current = await fetchFileContent({ fileId: existing._id });
+    if (!current.success) {
+        throw new Error(current.error || 'Failed to fetch current file content for patching.');
+    }
+
+    return applySearchReplaceBlocks(current.content, patchBlocks);
+}
+
+function findMatchingFile(files: FileType[], updateFilename: string): FileType | undefined {
+    const target = normalizePath(updateFilename);
+    const targetBase = target.split('/').pop() || target;
+
+    const exact = files.find((f) => normalizePath(f.name) === target);
+    if (exact) return exact;
+
+    const byKeySuffix = files.find((f) => normalizePath(f.key).endsWith(`/${target}`) || normalizePath(f.key) === target);
+    if (byKeySuffix) return byKeySuffix;
+
+    const basenameMatches = files.filter((f) => {
+        const name = normalizePath(f.name);
+        return name === targetBase || name.endsWith(`/${targetBase}`);
+    });
+
+    return basenameMatches.length === 1 ? basenameMatches[0] : undefined;
+}
+
+function mergeMessagesById(existing: Message[], incoming: Message[]): Message[] {
+    const map = new Map<string, Message>();
+
+    for (const message of existing) {
+        map.set(message._id, message);
+    }
+
+    for (const message of incoming) {
+        map.set(message._id, message);
+    }
+
+    return Array.from(map.values()).sort((left, right) => {
+        if (left.createdAt !== right.createdAt) {
+            return left.createdAt - right.createdAt;
+        }
+        return left.updatedAt - right.updatedAt;
+    });
+}
+
+function getUpdateKey(update: FileUpdate): string {
+    return `${update.action}:${normalizePath(update.filename)}`;
+}
+
 async function validatePromptWithAI(prompt: string) {
     // Local validation prevents noisy 404s from optional external endpoints.
     return validatePrompt(prompt);
@@ -66,31 +244,92 @@ export function useAIAgent(
     projectId: string | undefined,
     files: FileType[],
     selectedFile: string | undefined,
-    selectedFileContent: string | undefined
+    selectedFileContent: string | undefined,
+    onFileApplied?: (event: FileAppliedEvent) => void
 ): UseAIAgentReturn {
     const [messages, setMessages] = useState<Message[]>([]);
+    const [hasOlderMessages, setHasOlderMessages] = useState(false);
+    const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
+    const [oldestMessageCreatedAt, setOldestMessageCreatedAt] = useState<number | null>(null);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isStreaming, setIsStreaming] = useState(false);
+    const [applyingUpdateKeys, setApplyingUpdateKeys] = useState<string[]>([]);
     const [fileUpdates, setFileUpdates] = useState<FileUpdate[]>([]);
 
-    // Load message history on mount / projectId change
+    const wait = useCallback((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)), []);
+
+    // Load initial chat history (latest N) on mount / projectId change
     useEffect(() => {
         if (!projectId) return;
+
+        let cancelled = false;
         setMessages([]);
+        setFileUpdates([]);
+        setHasOlderMessages(false);
+        setIsLoadingOlderMessages(false);
+        setOldestMessageCreatedAt(null);
+
         messagesService
-            .find({ projectId, $sort: { createdAt: 1 } })
-            .then((result) => setMessages(result.data))
+            .find({ projectId, $sort: { createdAt: -1 }, $limit: INITIAL_MESSAGES_LIMIT })
+            .then((result) => {
+                if (cancelled) return;
+                const latestMessages = [...result.data].reverse();
+                setMessages(latestMessages);
+                setOldestMessageCreatedAt(latestMessages[0]?.createdAt ?? null);
+                setHasOlderMessages(result.total > latestMessages.length);
+            })
             .catch(() => {
                 /* silently fail - no toast needed on initial load */
             });
+
+        return () => {
+            cancelled = true;
+        };
     }, [projectId]);
+
+    const loadOlderMessages = useCallback(async () => {
+        if (!projectId || !hasOlderMessages || isLoadingOlderMessages || oldestMessageCreatedAt === null) return;
+
+        setIsLoadingOlderMessages(true);
+        try {
+            const result = await messagesService.find({
+                projectId,
+                $sort: { createdAt: -1 },
+                $limit: OLDER_MESSAGES_BATCH_SIZE,
+                createdAt: { $lt: oldestMessageCreatedAt }
+            });
+
+            const olderMessages = [...result.data].reverse();
+
+            if (olderMessages.length === 0) {
+                setHasOlderMessages(false);
+                return;
+            }
+
+            setMessages((prev) => mergeMessagesById(olderMessages, prev));
+            setOldestMessageCreatedAt(olderMessages[0]?.createdAt ?? oldestMessageCreatedAt);
+            setHasOlderMessages(olderMessages.length === OLDER_MESSAGES_BATCH_SIZE);
+        } catch {
+            toast.error('Failed to load older messages');
+        } finally {
+            setIsLoadingOlderMessages(false);
+        }
+    }, [hasOlderMessages, isLoadingOlderMessages, oldestMessageCreatedAt, projectId]);
 
     // Real-time: append new messages from server (avoids duplicates)
     const handleMessageCreated = useCallback((message: Message) => {
+        if (message.role === 'assistant') {
+            const parsedUpdates = parseFileUpdatesFromContent(message.content);
+            if (parsedUpdates.length > 0) {
+                setFileUpdates((prev) => mergeFileUpdates(prev, parsedUpdates));
+            }
+        }
+
         setMessages((prev) => {
             const withoutStreaming = prev.filter((m) => m._id !== STREAMING_MESSAGE_ID);
-            return withoutStreaming.find((m) => m._id === message._id) ? withoutStreaming : [...withoutStreaming, message];
+            if (withoutStreaming.find((m) => m._id === message._id)) return withoutStreaming;
+            return mergeMessagesById(withoutStreaming, [message]);
         });
     }, []);
 
@@ -143,16 +382,20 @@ export function useAIAgent(
     const handleStreamFileUpdates = useCallback(
         (payload: AIStreamFileUpdatesEvent) => {
             if (toId(payload.projectId) !== toId(projectId)) return;
-            setFileUpdates(payload.updates || []);
+            const parsed = (payload.updates || []).map((update) => ({
+                ...update,
+                filename: normalizePath(update.filename)
+            }));
+            setFileUpdates((prev) => mergeFileUpdates(prev, parsed));
         },
         [projectId]
     );
 
-    useSocketEvent<AIStreamChunkEvent>('ai-stream::chunk', handleStreamChunk, (chunk) => chunk.projectId === projectId);
-    useSocketEvent<AIStreamFileUpdatesEvent>('ai-stream::file-updates', handleStreamFileUpdates, (payload) => payload.projectId === projectId);
+    useRealtimeUpdates<AIStreamChunkEvent>('aiStream', 'chunk', handleStreamChunk, (chunk) => toId(chunk.projectId) === toId(projectId));
+    useRealtimeUpdates<AIStreamFileUpdatesEvent>('aiStream', 'file-updates', handleStreamFileUpdates, (payload) => toId(payload.projectId) === toId(projectId));
 
     const streamAIResponse = useCallback(
-        async (conversationMessages: StreamMessage[], currentProjectId: string) => {
+        async (conversationMessages: StreamMessage[], currentProjectId: string, latestKnownCreatedAt: number) => {
             try {
                 setIsStreaming(true);
 
@@ -162,7 +405,7 @@ export function useAIAgent(
                     ...(selectedFileContent ? { selectedContent: selectedFileContent } : {})
                 };
 
-                await createAIStream({
+                const streamResult = await createAIStream({
                     projectId: currentProjectId,
                     message: conversationMessages[conversationMessages.length - 1]?.content || '',
                     conversationHistory: conversationMessages.slice(0, -1),
@@ -170,10 +413,55 @@ export function useAIAgent(
                     model: defaultAiModel
                 });
 
-                // Consistency fallback: refresh messages after stream completes
-                // so UI stays correct even if a realtime event was missed.
-                const refreshed = await messagesService.find({ projectId: currentProjectId, $sort: { createdAt: 1 } });
-                setMessages(refreshed.data);
+                if (streamResult?.messageId) {
+                    try {
+                        const assistantMessage = await messagesService.get(streamResult.messageId);
+                        setMessages((prev) => {
+                            const withoutStreaming = prev.filter((m) => m._id !== STREAMING_MESSAGE_ID);
+                            return mergeMessagesById(withoutStreaming, [assistantMessage]);
+                        });
+                        const parsedUpdates = parseFileUpdatesFromContent(assistantMessage.content);
+                        if (parsedUpdates.length > 0) {
+                            setFileUpdates((prev) => mergeFileUpdates(prev, parsedUpdates));
+                        }
+                        setIsStreaming(false);
+                        return;
+                    } catch {
+                        // Fall through to polling fallback.
+                    }
+                }
+
+                // Poll until the new assistant message is persisted.
+                // This keeps UX functional even when a realtime event is delayed/missed.
+                const startedAt = Date.now();
+                let settled = false;
+                while (!settled && Date.now() - startedAt < STREAM_POLL_TIMEOUT_MS) {
+                    const refreshed = await messagesService.find({
+                        projectId: currentProjectId,
+                        $sort: { createdAt: -1 },
+                        $limit: INITIAL_MESSAGES_LIMIT
+                    });
+
+                    const latestBatchAsc = [...refreshed.data].reverse();
+                    const hasNewAssistant = refreshed.data.some((m) => m.role === 'assistant' && m.createdAt > latestKnownCreatedAt);
+
+                    if (hasNewAssistant) {
+                        setMessages((prev) => mergeMessagesById(prev, latestBatchAsc));
+                        const latestAssistant = latestBatchAsc
+                            .slice()
+                            .reverse()
+                            .find((m) => m.role === 'assistant');
+                        const parsedUpdates = parseFileUpdatesFromContent(latestAssistant?.content || '');
+                        if (parsedUpdates.length > 0) {
+                            setFileUpdates((prev) => mergeFileUpdates(prev, parsedUpdates));
+                        }
+                        settled = true;
+                        break;
+                    }
+
+                    await wait(STREAM_POLL_INTERVAL_MS);
+                }
+
                 setMessages((prev) => prev.filter((m) => m._id !== STREAMING_MESSAGE_ID));
                 setIsStreaming(false);
             } catch (error) {
@@ -183,7 +471,7 @@ export function useAIAgent(
                 throw error;
             }
         },
-        [files, selectedFile, selectedFileContent]
+        [files, selectedFile, selectedFileContent, wait]
     );
 
     const handleSubmit = useCallback(
@@ -203,13 +491,15 @@ export function useAIAgent(
 
                 if (!validation.isValid) {
                     const followUp = validation.suggestedQuestions?.join('\n\n') ?? "I couldn't understand your request. Could you provide more details?";
-                    await messagesService.create({ projectId, role: 'assistant', type: 'text', content: followUp });
+                    const assistantMessage = await messagesService.create({ projectId, role: 'assistant', type: 'text', content: followUp });
+                    setMessages((prev) => (prev.find((m) => m._id === assistantMessage._id) ? prev : [...prev, assistantMessage]));
                     return;
                 }
 
                 const conversationMessages: StreamMessage[] = [...messages.map((m) => ({ role: m.role, content: m.content })), { role: 'user', content: messageContent }];
+                const latestKnownCreatedAt = messages[messages.length - 1]?.createdAt ?? 0;
 
-                await streamAIResponse(conversationMessages, projectId);
+                await streamAIResponse(conversationMessages, projectId, latestKnownCreatedAt);
             } catch (error) {
                 toast.error('Failed to send message', {
                     description: error instanceof Error ? error.message : 'Unknown error',
@@ -226,46 +516,74 @@ export function useAIAgent(
         async (update: FileUpdate) => {
             if (!projectId) return;
 
+            const updateKey = getUpdateKey(update);
+            setApplyingUpdateKeys((prev) => (prev.includes(updateKey) ? prev : [...prev, updateKey]));
+
             try {
                 if (update.action === 'delete') {
-                    const file = files.find((f) => f.name === update.filename);
+                    const file = findMatchingFile(files, update.filename);
                     if (file) {
                         await filesService.remove(file._id);
+                        onFileApplied?.({
+                            action: 'delete',
+                            filename: normalizePath(update.filename)
+                        });
                         toast.success(`Deleted: ${update.filename}`);
                     }
                 } else {
-                    const contentBytes = new TextEncoder().encode(update.content);
+                    const existing = findMatchingFile(files, update.filename);
+                    const resolvedContent = existing && update.action === 'modify' ? await resolveUpdatedContentForModify(update, existing) : update.content;
+                    const contentBytes = new TextEncoder().encode(resolvedContent);
                     if (contentBytes.length > MAX_FILE_SIZE) {
                         toast.error(`File exceeds 10MB limit (${(contentBytes.length / 1024 / 1024).toFixed(2)}MB)`);
                         return;
                     }
 
-                    const key = `projects/${projectId}/${update.filename}`;
-                    await createUpload({ key, content: update.content, contentType: 'text/plain', projectId });
+                    const normalizedFilename = normalizePath(update.filename);
+                    const key = existing?.key || `projects/${projectId}/${normalizedFilename}`;
+                    await createUpload({ key, content: resolvedContent, contentType: 'text/plain', projectId });
 
-                    const existing = files.find((f) => f.name === update.filename);
                     if (existing) {
                         await filesService.patch(existing._id, { size: contentBytes.length, currentVersion: (existing.currentVersion || 1) + 1 });
+                        onFileApplied?.({
+                            action: 'modify',
+                            filename: normalizePath(existing.name || update.filename),
+                            content: resolvedContent
+                        });
                         toast.success(`Updated: ${update.filename}`);
                     } else {
                         await filesService.create({
                             projectId,
-                            name: update.filename,
+                            name: normalizedFilename,
                             key,
-                            fileType: update.filename.split('.').pop() || 'text',
+                            fileType: normalizedFilename.split('.').pop() || 'text',
                             size: contentBytes.length,
                             currentVersion: 1
+                        });
+                        onFileApplied?.({
+                            action: 'create',
+                            filename: normalizedFilename,
+                            content: resolvedContent
                         });
                         toast.success(`Created: ${update.filename}`);
                     }
                 }
 
                 setFileUpdates((prev) => prev.filter((u) => u.filename !== update.filename));
-            } catch {
-                toast.error('Failed to apply file update');
+            } catch (error) {
+                const message = error instanceof Error ? error.message : 'Failed to apply file update';
+                if (message.includes('SEARCH/REPLACE')) {
+                    toast.error('Cannot apply update safely', {
+                        description: 'Ask Mocky to provide SEARCH/REPLACE blocks for modify actions.'
+                    });
+                } else {
+                    toast.error('Failed to apply file update');
+                }
+            } finally {
+                setApplyingUpdateKeys((prev) => prev.filter((key) => key !== updateKey));
             }
         },
-        [projectId, files]
+        [projectId, files, onFileApplied]
     );
 
     const handleRejectUpdate = useCallback((update: FileUpdate) => {
@@ -280,12 +598,17 @@ export function useAIAgent(
 
     return {
         messages,
+        hasOlderMessages,
+        isLoadingOlderMessages,
         input,
         setInput,
         isLoading,
         isStreaming,
+        isApplyingUpdates: applyingUpdateKeys.length > 0,
+        applyingUpdateKeys,
         fileUpdates,
         handleSubmit,
+        loadOlderMessages,
         handleAcceptUpdate,
         handleRejectUpdate,
         handleAcceptAllUpdates

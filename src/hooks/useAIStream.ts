@@ -84,11 +84,7 @@ export function useAIStream(): UseAIStreamReturn {
     useEffect(() => {
         if (!isBrowser) return;
 
-        const socket = feathersClient.io;
-        if (!socket) {
-            console.warn('[useAIStream] Socket not available');
-            return;
-        }
+        const service = feathersClient.service('ai-stream');
 
         // Handle AI stream chunks
         const handleChunk = (data: AIStreamChunk) => {
@@ -132,13 +128,14 @@ export function useAIStream(): UseAIStreamReturn {
             setFileUpdates(data.updates);
         };
 
-        // Listen to Socket.IO events
-        socket.on('ai-stream::chunk', handleChunk);
-        socket.on('ai-stream::file-updates', handleFileUpdates);
+        service.removeListener('chunk', handleChunk);
+        service.removeListener('file-updates', handleFileUpdates);
+        service.on('chunk', handleChunk);
+        service.on('file-updates', handleFileUpdates);
 
         return () => {
-            socket.off('ai-stream::chunk', handleChunk);
-            socket.off('ai-stream::file-updates', handleFileUpdates);
+            service.removeListener('chunk', handleChunk);
+            service.removeListener('file-updates', handleFileUpdates);
         };
     }, [isBrowser, currentProjectId]);
 

@@ -45,20 +45,18 @@ export const useRealtimeUpdates = <T>(
             }
         };
 
-        const attachListener = async () => {
-            try {
-                await feathersClient.reAuthenticate();
-            } catch (error) {
-                // Token may be missing in public routes; the listener still works for public events.
-                console.debug(`[useRealtimeUpdates] Re-auth skipped for ${serviceName}:`, error);
-            }
-
+        const attachListener = () => {
             if (isDisposed) {
                 return;
             }
 
             service.removeListener(eventType, handler);
             service.on(eventType, handler);
+
+            feathersClient.reAuthenticate().catch((error) => {
+                // Token may be missing in public routes; listeners are still attached.
+                console.debug(`[useRealtimeUpdates] Re-auth skipped for ${serviceName}:`, error);
+            });
         };
 
         if (socket.connected) {
@@ -91,12 +89,18 @@ export const useProjectChannel = (projectId: string | null) => {
 
         if (!projectId) return;
 
+        const joinProject = () => {
+            socket.emit('join-project', projectId);
+            console.log(`[useProjectChannel] Joined project channel: ${projectId}`);
+        };
+
         // Join project channel
-        socket.emit('join-project', projectId);
-        console.log(`[useProjectChannel] Joined project channel: ${projectId}`);
+        joinProject();
+        socket.on('connect', joinProject);
 
         // Cleanup: leave project channel on unmount or projectId change
         return () => {
+            socket.off('connect', joinProject);
             socket.emit('leave-project', projectId);
             console.log(`[useProjectChannel] Left project channel: ${projectId}`);
         };
@@ -105,7 +109,7 @@ export const useProjectChannel = (projectId: string | null) => {
 
 /**
  * Hook for listening to custom Socket.IO events (not Feathers service events)
- * Useful for events like 'ai-stream::chunk', 'ai-stream::file-updates', etc.
+ * Useful for project-level channel events that are emitted directly on the socket.
  */
 export const useSocketEvent = <T>(eventName: string, callback: (data: T) => void, filter?: (data: T) => boolean) => {
     const callbackRef = useLatestRef(callback);

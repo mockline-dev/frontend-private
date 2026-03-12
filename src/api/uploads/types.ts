@@ -1,6 +1,7 @@
 export interface Upload {
-    uploadId: string;
+    uploadId?: string;
     key: string;
+    success?: boolean;
 }
 
 export interface UploadCreateData {

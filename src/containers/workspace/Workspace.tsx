@@ -15,6 +15,7 @@ import { AiAgent } from '@/containers/aiAgent/AIAgent';
 import { Terminal } from '@/containers/workspace/components/Terminal';
 import { TestPanel } from '@/containers/workspace/components/TestPanel';
 import { useFiles } from '@/hooks/useFiles';
+import { emitProjectLog, emitProjectLogs } from '@/hooks/useProjectLogs';
 import { useProjectCreation } from '@/hooks/useProjectCreation';
 import { useProjects } from '@/hooks/useProjects';
 import { useProjectChannel } from '@/hooks/useRealtimeUpdates';
@@ -48,6 +49,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     const [activeView, setActiveView] = useState<'code' | 'api'>('code');
     const [isTerminalOpen, setIsTerminalOpen] = useState(false);
     const [isRunning, setIsRunning] = useState(false);
+    const [isBackendReady, setIsBackendReady] = useState(false);
     const [isSnapshotCreating, setIsSnapshotCreating] = useState(false);
     const [snapshotActionId, setSnapshotActionId] = useState<string | null>(null);
     const [loadingContent, setLoadingContent] = useState(false);
@@ -72,47 +74,46 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         }
     });
 
-    // Use useProjects hook for project operations
     const { currentProject, loadProject } = useProjects(initialProject ? [initialProject] : []);
 
-    // Use useFiles hook for file operations
     const { files, loadFiles, updateFile, currentFile, setCurrentFile } = useFiles(initialFiles);
 
-    // Use useSnapshots hook for snapshot operations
     const { snapshots, loading: snapshotsLoading, createSnapshot, rollbackToSnapshot, deleteSnapshot, refresh: refreshSnapshots } = useSnapshots([]);
 
-    // Join project channel for real-time updates
     useProjectChannel(currentProjectId || null);
 
-    // Load project when projectId changes
     useEffect(() => {
         if (currentProjectId && isBrowser) {
             loadProject(currentProjectId);
         }
     }, [currentProjectId, loadProject, isBrowser]);
 
-    // Load files when projectId changes
+    useEffect(() => {
+        // Backend run state is scoped to the currently loaded project.
+        setIsBackendReady(false);
+        if (activeView === 'api') {
+            setActiveView('code');
+        }
+    }, [activeView, currentProjectId]);
+
     useEffect(() => {
         if (currentProjectId && isBrowser) {
             loadFiles(currentProjectId);
         }
     }, [currentProjectId, loadFiles, isBrowser]);
 
-    // Load snapshots when projectId changes
     useEffect(() => {
         if (currentProjectId && isBrowser) {
             refreshSnapshots(currentProjectId);
         }
     }, [currentProjectId, refreshSnapshots, isBrowser]);
 
-    // Update project name when project changes
     useEffect(() => {
         if (currentProject) {
             setProjectName(currentProject.name);
         }
     }, [currentProject]);
 
-    // Sync selected file with current file from hook
     useEffect(() => {
         if (currentFile) {
             const displayPath = getDisplayPath(currentFile);
@@ -139,7 +140,6 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                     model: defaultAiModel
                 });
             } catch (error) {
-                // Error is already handled by useProjectCreation hook
                 console.error('[Workspace] Failed to create project:', error);
             }
         },
@@ -209,7 +209,6 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                 } catch (error) {
                     console.error('Failed to load file content:', error);
                     toast.error('Failed to load file content');
-                    setSelectedFileContent('// Error loading file content');
                 } finally {
                     setLoadingContent(false);
                 }
@@ -225,6 +224,27 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         setSelectedFileContent(value || '');
     }, []);
 
+    const handleAIAppliedFile = useCallback(
+        async (event: { action: 'create' | 'modify' | 'delete'; filename: string; content?: string }) => {
+            if (!currentProjectId) return;
+
+            const normalizedSelected = (selectedFile || '').replace(/^\.\//, '').replace(/^\/+/, '');
+            const normalizedEvent = event.filename.replace(/^\.\//, '').replace(/^\/+/, '');
+            const selectedMatches = normalizedSelected === normalizedEvent || normalizedSelected.endsWith(`/${normalizedEvent}`);
+
+            if (selectedMatches) {
+                if (event.action === 'delete') {
+                    setSelectedFileContent('');
+                } else if (typeof event.content === 'string') {
+                    setSelectedFileContent(event.content);
+                }
+            }
+
+            await loadFiles(currentProjectId);
+        },
+        [currentProjectId, selectedFile, loadFiles]
+    );
+
     /**
      * Saves the current file content.
      */
@@ -237,7 +257,6 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                 currentVersion: (currentFile.currentVersion || 1) + 1
             });
 
-            // Upload content to R2
             await createUpload({
                 key: currentFile.key,
                 content: selectedFileContent,
@@ -310,7 +329,6 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         [currentProjectId, deleteSnapshot, refreshSnapshots]
     );
 
-    // Global keyboard shortcuts
     useEffect(() => {
         if (!isBrowser) return;
 
@@ -355,7 +373,6 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                 throw new Error(result.error);
             }
 
-            // Decode base64 and create blob
             const zipData = atob(result.data.zipBase64);
             const zipArray = new Uint8Array(zipData.length);
             for (let i = 0; i < zipData.length; i++) {
@@ -385,17 +402,47 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
 
         setIsRunning(true);
         setIsTerminalOpen(true);
+        emitProjectLog({
+            projectId: currentProjectId,
+            type: 'system',
+            message: 'Starting backend run pipeline...',
+            source: 'workspace'
+        });
 
         try {
             const result = await runBackend({ projectId: currentProjectId });
 
+            if (result.data?.logs?.length) {
+                emitProjectLogs(
+                    currentProjectId,
+                    result.data.logs.map((entry) => ({
+                        type: entry.type,
+                        message: entry.message,
+                        source: entry.source || 'runner'
+                    }))
+                );
+            }
+
             if (!result.success) {
+                emitProjectLog({
+                    projectId: currentProjectId,
+                    type: 'error',
+                    message: result.error,
+                    source: 'workspace'
+                });
                 throw new Error(result.error);
             }
 
             const data = result.data;
 
             if (data.success) {
+                setIsBackendReady(true);
+                emitProjectLog({
+                    projectId: currentProjectId,
+                    type: 'success',
+                    message: data.message || 'Backend server started successfully',
+                    source: 'workspace'
+                });
                 toast.success('Backend server started successfully!', {
                     description: data.project?.name ? `Project: ${data.project.name}` : undefined,
                     duration: 5000
@@ -411,10 +458,24 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                 console.log(`ReDoc: ${data.server?.redocUrl}`);
                 console.log(`OpenAPI: ${data.server?.openapiUrl}`);
             } else {
+                setIsBackendReady(false);
+                emitProjectLog({
+                    projectId: currentProjectId,
+                    type: 'error',
+                    message: data.details || data.message || 'Failed to start backend',
+                    source: 'workspace'
+                });
                 toast.error('Failed to start backend');
             }
         } catch (error) {
+            setIsBackendReady(false);
             console.error('Failed to run backend:', error);
+            emitProjectLog({
+                projectId: currentProjectId,
+                type: 'error',
+                message: error instanceof Error ? error.message : 'Failed to run backend',
+                source: 'workspace'
+            });
             toast.error('Failed to start backend');
         } finally {
             setIsRunning(false);
@@ -433,7 +494,6 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
      * Handles retry action.
      */
     const handleRetry = useCallback(() => {
-        // Reset state and let user try again
         resetState();
     }, [resetState]);
 
@@ -452,13 +512,10 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         };
     }, [isBrowser]);
 
-    // Unified error handling - check both creation state and project status
     const hasError = creationState.status === 'error' || currentProject?.status === 'error';
 
-    // Check if there's a prompt in URL (indicates new project creation in progress)
     const promptFromUrl = searchParams.get('prompt');
 
-    // Show loader when creating or waiting for project to be ready (but not on error)
     console.log('[Workspace] Loader check:', {
         hasError,
         isCreating,
@@ -482,8 +539,6 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         );
     }
 
-    // Unified error state handling for both creation errors and project status errors
-    // Don't show error state if there's a prompt in URL and not creating yet (project creation might still be starting)
     if (hasError && !(promptFromUrl && !isCreating)) {
         return (
             <ProjectCreationLoader
@@ -497,7 +552,6 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         );
     }
 
-    // Build file tree from files
     const fileTree = files.length > 0 ? buildFileTree(files) : [];
 
     return (
@@ -531,9 +585,20 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                         Code
                     </button>
                     <button
-                        onClick={() => setActiveView('api')}
+                        onClick={() => {
+                            if (!isBackendReady) {
+                                toast.info('Run backend first to enable API Testing');
+                                return;
+                            }
+                            setActiveView('api');
+                        }}
+                        disabled={!isBackendReady}
                         className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
-                            activeView === 'api' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                            activeView === 'api'
+                                ? 'bg-white text-gray-900 shadow-sm'
+                                : isBackendReady
+                                  ? 'text-gray-600 hover:text-gray-900'
+                                  : 'text-gray-400 cursor-not-allowed'
                         }`}
                     >
                         <TestTube2 className="w-3.5 h-3.5" />
@@ -588,6 +653,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                                         files={files}
                                         selectedFile={selectedFile || ''}
                                         selectedFileContent={selectedFileContent}
+                                        onFileApplied={handleAIAppliedFile}
                                     />
                                 ) : (
                                     <div className="h-full flex flex-col">
@@ -722,8 +788,25 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                                                 )}
                                             </div>
                                         </>
-                                    ) : (
+                                    ) : isBackendReady ? (
                                         <TestPanel projectId={currentProjectId as string} />
+                                    ) : (
+                                        <div className="h-full flex items-center justify-center bg-white">
+                                            <div className="text-center max-w-md px-6">
+                                                <TestTube2 className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                                                <p className="text-sm font-medium text-gray-900">API Testing is disabled</p>
+                                                <p className="text-xs text-gray-500 mt-1 mb-4">Start the backend first, then open API Testing.</p>
+                                                <Button
+                                                    onClick={handleRunBackend}
+                                                    disabled={!currentProjectId || isRunning}
+                                                    size="sm"
+                                                    className="h-8 bg-green-600 hover:bg-green-700"
+                                                >
+                                                    {isRunning ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Play className="w-3 h-3 mr-1" />}
+                                                    {isRunning ? 'Starting...' : 'Run Backend'}
+                                                </Button>
+                                            </div>
+                                        </div>
                                     )}
                                 </div>
                             </ResizablePanel>
@@ -771,7 +854,6 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     );
 }
 
-// Helper function to build file tree
 interface FileNode {
     name: string;
     type: 'file' | 'folder';
@@ -824,7 +906,6 @@ function getDisplayPath(file: ProjectFile): string {
     const marker = '/';
     const projectsPrefix = 'projects/';
 
-    // Prefer storage key because it preserves nested structure.
     if (key.startsWith(projectsPrefix)) {
         const firstSlashAfterProjectId = key.indexOf(marker, projectsPrefix.length);
         if (firstSlashAfterProjectId !== -1 && firstSlashAfterProjectId + 1 < key.length) {

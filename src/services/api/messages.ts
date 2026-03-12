@@ -34,6 +34,7 @@ export interface MessageQuery {
     $limit?: number;
     $skip?: number;
     projectId?: string;
+    [key: string]: unknown;
 }
 
 export const messagesService = {

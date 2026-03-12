@@ -24,17 +24,14 @@ export function Dashboard({ currentUser, initialProjects = [] }: DashboardProps)
     const [showAllProjects, setShowAllProjects] = useState(false);
     const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
 
-    // Use new useProjects hook for all project operations
     const { projects, loading, error, loadProjects, deleteProject, joinProject, leaveProject, refresh } = useProjects(initialProjects);
 
-    // Load projects on mount (client-side only)
     useEffect(() => {
         if (typeof window !== 'undefined') {
             loadProjects();
         }
     }, [loadProjects]);
 
-    // Join project channels for real-time updates
     useEffect(() => {
         if (typeof window !== 'undefined') {
             projects.forEach((project) => {
@@ -42,7 +39,6 @@ export function Dashboard({ currentUser, initialProjects = [] }: DashboardProps)
             });
         }
 
-        // Cleanup: leave all project channels on unmount
         return () => {
             if (typeof window !== 'undefined') {
                 projects.forEach((project) => {
@@ -52,14 +48,10 @@ export function Dashboard({ currentUser, initialProjects = [] }: DashboardProps)
         };
     }, [projects, joinProject, leaveProject]);
 
-    // Listen to real-time progress events via custom Socket.IO events
     useSocketEvent<ProgressEventData>('progress', (data) => {
-        // Progress updates are handled by useProjects hook internally
-        // This is just for any additional handling if needed
         console.log('Progress update received:', data);
     });
 
-    // Show error toast if there's an error
     useEffect(() => {
         if (error) {
             toast.error(error);
@@ -102,7 +94,6 @@ export function Dashboard({ currentUser, initialProjects = [] }: DashboardProps)
 
         setDeletingProjectId(projectId);
         try {
-            // Verify ownership before deleting
             const project = projects.find((p) => p._id === projectId);
             if (!currentUser || !project || project.userId !== currentUser.feathersId) {
                 toast.error('You do not have permission to delete this project');
@@ -112,7 +103,6 @@ export function Dashboard({ currentUser, initialProjects = [] }: DashboardProps)
             await deleteProject(projectId);
             toast.success(`Deleted: ${projectName}`);
 
-            // Refresh page data
             router.refresh();
         } catch (err) {
             console.error('Failed to delete project:', err);
@@ -130,7 +120,7 @@ export function Dashboard({ currentUser, initialProjects = [] }: DashboardProps)
                     <h1 className="text-3xl font-bold text-foreground mb-2">
                         {greeting}, {userName}!
                     </h1>
-                    <p className="text-muted-foreground">Here's what's happening with your projects</p>
+                    <p className="text-muted-foreground">Here&apos;s what&apos;s happening with your projects</p>
                 </div>
 
                 <DashboardStats projects={projects} loading={loading} />

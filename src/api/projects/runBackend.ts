@@ -254,6 +254,11 @@ export const runBackend = async ({ projectId, onLog }: RunBackendParams): Promis
             }
         }
 
+        // Fix missing SQLAlchemy imports in model files
+        pushLog('system', 'Checking and fixing model file imports...', 'import-fixer');
+        await fixModelFileImports(tempDir, filesList);
+        pushLog('success', 'Model file imports verified and fixed', 'import-fixer');
+
         // Install Python dependencies
         pushLog('system', 'Installing Python dependencies...', 'pip');
         try {
@@ -691,4 +696,100 @@ async function getAvailablePort(): Promise<number> {
             });
         });
     });
+}
+
+/**
+ * Fixes missing SQLAlchemy imports in model files.
+ * This function scans Python files in the app/models/ directory and ensures
+ * that all necessary SQLAlchemy imports are present, including the Base class.
+ */
+async function fixModelFileImports(tempDir: string, filesList: string[]): Promise<void> {
+    const modelFiles = filesList.filter((file) => file.startsWith('app/models/') && file.endsWith('.py'));
+
+    if (modelFiles.length === 0) {
+        return;
+    }
+
+    for (const modelFile of modelFiles) {
+        const filePath = join(tempDir, modelFile);
+        try {
+            let content = await readFile(filePath, 'utf-8');
+
+            // Check if the file uses Base class
+            const hasBaseClass = /\bclass\s+\w+\s*\(\s*Base\s*\)/.test(content);
+
+            if (!hasBaseClass) {
+                continue; // Skip if file doesn't use Base class
+            }
+
+            // Check if Base is imported or defined
+            const hasBaseImport = /from\s+sqlalchemy\.orm\s+import.*declarative_base|Base\s*=\s*declarative_base\(\)/.test(content);
+
+            if (hasBaseImport) {
+                continue; // Skip if Base is already imported
+            }
+
+            // Check what imports are already present
+            const hasSqlalchemyImports = /from\s+sqlalchemy\s+import/.test(content);
+            const hasDateTimeImport = /from\s+datetime\s+import/.test(content);
+
+            // Build the necessary imports
+            const importsToAdd: string[] = [];
+
+            if (!hasSqlalchemyImports) {
+                importsToAdd.push('from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey');
+            } else {
+                // Add missing Column types if sqlalchemy is imported
+                const existingImports = content.match(/from\s+sqlalchemy\s+import\s+([^\n]+)/);
+                if (existingImports) {
+                    const importedTypes = existingImports[1].split(',').map((s) => s.trim());
+                    const requiredTypes = ['Column', 'Integer', 'String', 'Boolean', 'DateTime', 'ForeignKey'];
+                    const missingTypes = requiredTypes.filter((type) => !importedTypes.includes(type));
+                    if (missingTypes.length > 0) {
+                        importsToAdd.push(`from sqlalchemy import ${missingTypes.join(', ')}`);
+                    }
+                }
+            }
+
+            // Add declarative_base import
+            importsToAdd.push('from sqlalchemy.orm import declarative_base');
+
+            // Add datetime import if not present
+            if (!hasDateTimeImport) {
+                importsToAdd.push('from datetime import datetime');
+            }
+
+            // Add Base definition
+            importsToAdd.push('');
+            importsToAdd.push('Base = declarative_base()');
+
+            if (importsToAdd.length === 0) {
+                continue;
+            }
+
+            // Find the position to insert imports (after existing imports or at the beginning)
+            const lines = content.split('\n');
+            let insertIndex = 0;
+
+            // Find the last import statement
+            for (let i = 0; i < lines.length; i++) {
+                const trimmedLine = lines[i].trim();
+                if (trimmedLine.startsWith('from ') || trimmedLine.startsWith('import ')) {
+                    insertIndex = i + 1;
+                } else if (trimmedLine && !trimmedLine.startsWith('#') && insertIndex > 0) {
+                    break;
+                }
+            }
+
+            // Insert the new imports
+            lines.splice(insertIndex, 0, ...importsToAdd);
+
+            // Write the fixed content back
+            await writeFile(filePath, lines.join('\n'), 'utf-8');
+
+            console.log(`Fixed missing imports in model file: ${modelFile}`);
+        } catch (error) {
+            console.error(`Failed to fix imports in ${modelFile}:`, error);
+        }
+    }
 }

@@ -72,7 +72,23 @@ const BACKEND_KEYWORDS = [
     'service',
     'architecture',
     'deployment',
-    'docker'
+    'docker',
+    // Review and analysis
+    'review',
+    'analyze',
+    'analysis',
+    'check',
+    'examine',
+    'improve',
+    'optimize',
+    'refactor',
+    'structure',
+    'code',
+    'implementation',
+    'functionality',
+    'logic',
+    'security',
+    'performance'
 ];
 
 // Frameworks and technologies
@@ -132,7 +148,41 @@ const BACKEND_PATTERNS = [
     /setup.*database/i,
     /generate.*crud/i,
     /(user|product|order|payment).*management/i,
-    /\b(rest|graphql)\s*api/i
+    /\b(rest|graphql)\s*api/i,
+    // Review and analysis patterns
+    /review.*api/i,
+    /review.*backend/i,
+    /review.*code/i,
+    /review.*structure/i,
+    /review.*implementation/i,
+    /analyze.*api/i,
+    /analyze.*backend/i,
+    /analyze.*code/i,
+    /analyze.*structure/i,
+    /check.*api/i,
+    /check.*backend/i,
+    /check.*code/i,
+    /examine.*api/i,
+    /examine.*backend/i,
+    /examine.*code/i,
+    /improve.*api/i,
+    /improve.*backend/i,
+    /improve.*code/i,
+    /optimize.*api/i,
+    /optimize.*backend/i,
+    /optimize.*code/i,
+    /refactor.*api/i,
+    /refactor.*backend/i,
+    /refactor.*code/i,
+    /help.*with.*api/i,
+    /help.*with.*backend/i,
+    /help.*with.*code/i,
+    /fix.*api/i,
+    /fix.*backend/i,
+    /fix.*code/i,
+    /debug.*api/i,
+    /debug.*backend/i,
+    /debug.*code/i
 ];
 
 /**
@@ -233,7 +283,7 @@ export function validatePrompt(prompt: string): PromptValidationResult {
     const confidence = Math.min(totalScore / words.length, 1);
 
     // Determine category based on score and length
-    if (confidence >= 0.3 || totalScore >= 2) {
+    if (confidence >= 0.2 || totalScore >= 1) {
         return {
             isValid: true,
             confidence,
@@ -254,26 +304,21 @@ export function validatePrompt(prompt: string): PromptValidationResult {
     }
 
     // Check if it's a general development request that could be backend
-    const generalDevKeywords = ['app', 'application', 'system', 'platform', 'service'];
+    const generalDevKeywords = ['app', 'application', 'system', 'platform', 'service', 'project', 'code', 'feature', 'functionality'];
     const hasGeneralDev = generalDevKeywords.some((keyword) => trimmedPrompt.includes(keyword));
 
-    if (hasGeneralDev && words.length >= 3) {
+    if (hasGeneralDev && words.length >= 2) {
         return {
             isValid: true,
             confidence: 0.4,
             category: 'general',
-            reason: 'General development request - may need clarification',
-            suggestedQuestions: [
-                'Would you like me to create a backend API for this?',
-                'What specific backend features do you need?',
-                'Should I include database integration?',
-                'Do you need user authentication?'
-            ]
+            reason: 'General development request - will be processed by AI',
+            enhancedPrompt: buildEnhancedPrompt(prompt)
         };
     }
 
     // If prompt is too short or unclear
-    if (words.length < 3) {
+    if (words.length < 2) {
         return {
             isValid: false,
             confidence: 0.2,
@@ -288,18 +333,14 @@ export function validatePrompt(prompt: string): PromptValidationResult {
         };
     }
 
-    // Default case - might be valid but needs clarification
+    // Default case - accept the prompt and let the AI handle it
+    // This allows the AI to respond intelligently to a wider range of requests
     return {
-        isValid: false,
-        confidence: 0.3,
-        category: 'unclear',
-        reason: 'Prompt needs more specific backend requirements',
-        suggestedQuestions: [
-            "I couldn't identify specific backend requirements in your prompt. Could you be more specific?",
-            'Are you looking to create an API, database, or specific backend functionality?',
-            'What type of application backend do you need?',
-            'Would you like me to suggest some backend features for your project?'
-        ]
+        isValid: true,
+        confidence: 0.25,
+        category: 'general',
+        reason: 'Prompt accepted for AI processing',
+        enhancedPrompt: buildEnhancedPrompt(prompt)
     };
 }
 

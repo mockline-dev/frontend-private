@@ -5,6 +5,8 @@ import { apiServices } from '../services';
 
 export interface EnhancePromptParams {
     userPrompt: string;
+    framework?: 'fast-api' | 'feathers';
+    language?: 'python' | 'typescript';
 }
 
 export type EnhancePromptResponse = { enhancedPrompt: string };

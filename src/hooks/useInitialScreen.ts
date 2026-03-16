@@ -16,6 +16,7 @@ interface UseInitialScreenOptions {
 }
 
 type PreparationPhase = 'idle' | 'enhancing' | 'inferring-meta';
+type ProjectStackOption = 'fast-api/python' | 'feathers/typescript';
 
 const SAVED_PROMPT_KEY = 'savedPrompt';
 
@@ -25,6 +26,7 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
     const [enhancedPrompt, setEnhancedPrompt] = useState('');
     const [enhanceLoading, setEnhanceLoading] = useState(false);
     const [preparationPhase, setPreparationPhase] = useState<PreparationPhase>('idle');
+    const [selectedStack, setSelectedStack] = useState<ProjectStackOption>('fast-api/python');
 
     const {
         state: creationState,
@@ -40,18 +42,22 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
         }
     });
 
-    const handleEnhancePrompt = useCallback(async (prompt: string) => {
-        try {
-            setEnhanceLoading(true);
-            const response = await enhancePrompt({ userPrompt: prompt });
-            setEnhancedPrompt(response.enhancedPrompt);
-        } catch (error) {
-            console.error('Error enhancing prompt:', error);
-            toast.error('Failed to enhance prompt');
-        } finally {
-            setEnhanceLoading(false);
-        }
-    }, []);
+    const handleEnhancePrompt = useCallback(
+        async (prompt: string) => {
+            try {
+                setEnhanceLoading(true);
+                const [framework, language] = selectedStack.split('/') as ['fast-api' | 'feathers', 'python' | 'typescript'];
+                const response = await enhancePrompt({ userPrompt: prompt, framework, language });
+                setEnhancedPrompt(response.enhancedPrompt);
+            } catch (error) {
+                console.error('Error enhancing prompt:', error);
+                toast.error('Failed to enhance prompt');
+            } finally {
+                setEnhanceLoading(false);
+            }
+        },
+        [selectedStack]
+    );
 
     const handleSendPrompt = useCallback(
         async (prompt: string) => {
@@ -71,15 +77,17 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
 
             try {
                 setPreparationPhase('inferring-meta');
-                const response = await enhancePrompt({ userPrompt: normalizedPrompt });
+                const [framework, language] = selectedStack.split('/') as ['fast-api' | 'feathers', 'python' | 'typescript'];
+
+                const response = await enhancePrompt({ userPrompt: normalizedPrompt, framework, language });
                 const metadata = await inferProjectMeta({ enhancedPrompt: response.enhancedPrompt });
 
                 setPreparationPhase('idle');
                 await createProject({
                     name: metadata.name?.trim() || (normalizedPrompt.length > 60 ? `${normalizedPrompt.slice(0, 57)}...` : normalizedPrompt),
                     description: metadata.description?.trim() || normalizedPrompt,
-                    framework: 'fast-api',
-                    language: 'python',
+                    framework,
+                    language,
                     model: defaultAiModel
                 });
             } catch (error) {
@@ -89,7 +97,7 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
                 setPreparationPhase('idle');
             }
         },
-        [createProject, isCreating, preparationPhase, options?.currentUser, router]
+        [createProject, isCreating, preparationPhase, selectedStack, options?.currentUser, router]
     );
 
     useEffect(() => {
@@ -116,6 +124,8 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
         enhanceLoading,
         handleEnhancePrompt,
         handleSendPrompt,
+        selectedStack,
+        setSelectedStack,
         creationState,
         isCreating,
         preparationPhase,

@@ -6,6 +6,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 
 import Image from 'next/image';
 import { Button } from '../button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../select';
 import { Spinner } from '../spinner';
 import { BackgroundOrbs } from './background-orbs';
 import { ChatTextarea } from './chat-textarea';
@@ -37,7 +38,9 @@ export function AnimatedAIChat({
     enhanceLoading,
     sending = false,
     isMorphing = false,
-    onMorphComplete
+    onMorphComplete,
+    selectedStack,
+    onStackChange
 }: {
     enhancedPrompt: string;
     value: string;
@@ -48,6 +51,8 @@ export function AnimatedAIChat({
     sending?: boolean;
     isMorphing?: boolean;
     onMorphComplete?: () => void;
+    selectedStack: 'fast-api/python' | 'feathers/typescript';
+    onStackChange: (stack: 'fast-api/python' | 'feathers/typescript') => void;
 }) {
     const isTyping = sending;
     const [activeSuggestion, setActiveSuggestion] = useState<number>(-1);
@@ -172,7 +177,21 @@ export function AnimatedAIChat({
                             />
                         </div>
 
-                        <div className="p-4 sm:p-5 border-black/5 flex items-center justify-end gap-3 sm:gap-4">
+                        <div className="p-4 sm:p-5 border-black/5 flex items-center justify-between gap-3 sm:gap-4">
+                            <Select
+                                value={selectedStack}
+                                onValueChange={(nextValue: 'fast-api/python' | 'feathers/typescript') => onStackChange(nextValue)}
+                                disabled={isTyping || enhanceLoading}
+                            >
+                                <SelectTrigger className="w-55 bg-white/50 border-black/10 text-black">
+                                    <SelectValue placeholder="Select stack" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="fast-api/python">FastAPI / Python</SelectItem>
+                                    <SelectItem value="feathers/typescript">Feathers.js / TypeScript</SelectItem>
+                                </SelectContent>
+                            </Select>
+
                             <Button
                                 variant="ghost"
                                 size="sm"

@@ -1,6 +1,6 @@
 import type { File } from '@/services/api/files';
 import { createFeathersServerClient } from '@/services/feathersServer';
-import { spawn } from 'child_process';
+import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
 import { existsSync } from 'fs';
 import { mkdir, readFile, rm, writeFile } from 'fs/promises';
 import { createServer } from 'net';
@@ -156,6 +156,64 @@ export const runBackend = async ({ projectId, onLog }: RunBackendParams): Promis
         });
     };
 
+    const EMAIL_VALIDATION_SNIPPET =
+        "import importlib.metadata as m; import email_validator; from email_validator import validate_email; print('email-validator version:', m.version('email-validator')); print('validate_email callable:', callable(validate_email))";
+
+    const verifyEmailValidatorWithPython = async (cwd: string, pythonExecutable: string): Promise<void> => {
+        await runStreamingCommand(pythonExecutable, ['-c', EMAIL_VALIDATION_SNIPPET], cwd, 'pip', 30000);
+    };
+
+    const installEmailValidatorWithPythonPip = async (cwd: string, pythonExecutable?: string): Promise<void> => {
+        if (pythonExecutable) {
+            await runStreamingCommand(pythonExecutable, ['-m', 'pip', 'install', 'email-validator', '--disable-pip-version-check'], cwd, 'pip', 60000);
+            return;
+        }
+
+        try {
+            await runStreamingCommand('python', ['-m', 'pip', 'install', 'email-validator', '--disable-pip-version-check'], cwd, 'pip', 60000);
+            return;
+        } catch {
+            await runStreamingCommand('python3', ['-m', 'pip', 'install', 'email-validator', '--disable-pip-version-check'], cwd, 'pip', 60000);
+        }
+    };
+
+    const installWithPythonPip = async (cwd: string, installArgs: string[], timeoutMs = PIP_INSTALL_TIMEOUT_MS, pythonExecutable?: string): Promise<void> => {
+        if (pythonExecutable) {
+            await runStreamingCommand(pythonExecutable, ['-m', 'pip', ...installArgs], cwd, 'pip', timeoutMs);
+            return;
+        }
+
+        try {
+            await runStreamingCommand('python', ['-m', 'pip', ...installArgs], cwd, 'pip', timeoutMs);
+            return;
+        } catch {
+            await runStreamingCommand('python3', ['-m', 'pip', ...installArgs], cwd, 'pip', timeoutMs);
+        }
+    };
+
+    const getVenvPythonPath = (cwd: string): string => {
+        return process.platform === 'win32' ? join(cwd, '.venv', 'Scripts', 'python.exe') : join(cwd, '.venv', 'bin', 'python');
+    };
+
+    const ensureVirtualEnv = async (cwd: string): Promise<string> => {
+        if (!existsSync(join(cwd, '.venv'))) {
+            pushLog('system', 'Creating isolated Python virtual environment...', 'python');
+            try {
+                await runStreamingCommand('python3', ['-m', 'venv', '.venv'], cwd, 'python', 120000);
+            } catch {
+                await runStreamingCommand('python', ['-m', 'venv', '.venv'], cwd, 'python', 120000);
+            }
+        } else {
+            pushLog('info', 'Reusing existing Python virtual environment', 'python');
+        }
+
+        const venvPython = getVenvPythonPath(cwd);
+
+        await runStreamingCommand(venvPython, ['-m', 'pip', 'install', '--upgrade', 'pip', 'setuptools', 'wheel', '--disable-pip-version-check'], cwd, 'pip', 120000);
+
+        return venvPython;
+    };
+
     try {
         const server = await createFeathersServerClient();
 
@@ -181,6 +239,12 @@ export const runBackend = async ({ projectId, onLog }: RunBackendParams): Promis
 
         pushLog('info', `Found ${files.length} files in project`, 'backend-runner');
 
+        const isTypeScriptFeathersStack = project.framework === 'feathers' || project.language === 'typescript';
+
+        if (isTypeScriptFeathersStack) {
+            return await runTypeScriptBackend({ project, files, tempDir, logs, pushLog, runStreamingCommand });
+        }
+
         // Find main.py or server.py file
         const mainFile = files.find((f: File) => {
             const relativePath = toProjectRelativePath(f);
@@ -191,7 +255,14 @@ export const runBackend = async ({ projectId, onLog }: RunBackendParams): Promis
             return { success: false, error: 'No main.py or server.py file found' };
         }
 
-        pushLog('info', `Detected entrypoint: ${toProjectRelativePath(mainFile)}`, 'backend-runner');
+        const mainRelativePath = toProjectRelativePath(mainFile);
+        const projectRootRelative = dirname(mainRelativePath) === '.' ? '' : dirname(mainRelativePath);
+        const projectRootPath = projectRootRelative ? join(tempDir, projectRootRelative) : tempDir;
+        const entryModuleName = mainRelativePath.split('/').pop()?.replace(/\.py$/i, '') || 'main';
+        const entryFileName = `${entryModuleName}.py`;
+
+        pushLog('info', `Detected entrypoint: ${mainRelativePath}`, 'backend-runner');
+        pushLog('info', `Detected project root: ${projectRootRelative || '(root)'}`, 'backend-runner');
 
         // Check if requirements.txt exists
         const requirementsFile = files.find((f: File) => {
@@ -254,17 +325,23 @@ export const runBackend = async ({ projectId, onLog }: RunBackendParams): Promis
             }
         }
 
-        // Fix missing SQLAlchemy imports in model files
+        // Fix common SQLAlchemy/Pydantic model issues in generated files
         pushLog('system', 'Checking and fixing model file imports...', 'import-fixer');
-        await fixModelFileImports(tempDir, filesList);
+        const projectFilesList = filesList
+            .filter((filePath) => !projectRootRelative || filePath.startsWith(`${projectRootRelative}/`))
+            .map((filePath) => (projectRootRelative ? filePath.slice(projectRootRelative.length + 1) : filePath));
+        await fixModelFileImports(projectRootPath, projectFilesList);
         pushLog('success', 'Model file imports verified and fixed', 'import-fixer');
+
+        const venvPython = await ensureVirtualEnv(projectRootPath);
+        pushLog('success', `Python virtual environment ready: ${venvPython}`, 'python');
 
         // Install Python dependencies
         pushLog('system', 'Installing Python dependencies...', 'pip');
         try {
-            if (existsSync(join(tempDir, 'requirements.txt'))) {
+            if (existsSync(join(projectRootPath, 'requirements.txt'))) {
                 // Clean up requirements.txt - remove invalid entries and version constraints
-                const requirementsPath = join(tempDir, 'requirements.txt');
+                const requirementsPath = join(projectRootPath, 'requirements.txt');
                 let requirementsContent = await readFile(requirementsPath, 'utf-8');
                 const nonPythonPackages = new Set(['express', 'bcryptjs', 'next', 'react', 'react-dom', 'vite', 'typescript', 'nodemon', 'npm', 'pnpm', 'yarn']);
 
@@ -307,18 +384,19 @@ export const runBackend = async ({ projectId, onLog }: RunBackendParams): Promis
                 pushLog('info', 'Cleaned requirements.txt - removed version constraints and ensured email-validator is present', 'pip');
 
                 pushLog('info', 'Installing dependencies from requirements.txt...', 'pip');
-                await runStreamingCommand('pip', ['install', '-r', 'requirements.txt', '--disable-pip-version-check'], tempDir, 'pip');
+                await installWithPythonPip(projectRootPath, ['install', '-r', 'requirements.txt', '--disable-pip-version-check'], PIP_INSTALL_TIMEOUT_MS, venvPython);
                 pushLog('success', 'Dependencies installed successfully', 'pip');
 
                 // Validate that email-validator is actually installed
                 pushLog('info', 'Validating email-validator installation...', 'pip');
                 try {
-                    await runStreamingCommand('python', ['-c', 'import email_validator; print(f"email-validator version: {email_validator.__version__}")'], tempDir, 'pip', 30000);
+                    await verifyEmailValidatorWithPython(projectRootPath, venvPython);
                     pushLog('success', 'email-validator is installed and working correctly', 'pip');
-                } catch (validationError) {
+                } catch {
                     pushLog('warning', 'email-validator validation failed, attempting to install it separately...', 'pip');
                     try {
-                        await runStreamingCommand('pip', ['install', 'email-validator', '--disable-pip-version-check'], tempDir, 'pip', 60000);
+                        await installEmailValidatorWithPythonPip(projectRootPath, venvPython);
+                        await verifyEmailValidatorWithPython(projectRootPath, venvPython);
                         pushLog('success', 'email-validator installed successfully via separate installation', 'pip');
                     } catch (separateInstallError) {
                         const error = separateInstallError as Error;
@@ -340,29 +418,42 @@ export const runBackend = async ({ projectId, onLog }: RunBackendParams): Promis
                 }
             } else {
                 pushLog('info', 'Installing default Python dependencies...', 'pip');
-                await runStreamingCommand('pip', ['install', 'fastapi', 'uvicorn[standard]', 'python-multipart', 'email-validator', '--disable-pip-version-check'], tempDir, 'pip');
+                await installWithPythonPip(
+                    projectRootPath,
+                    ['install', 'fastapi', 'uvicorn[standard]', 'python-multipart', 'email-validator', 'sqlalchemy', '--disable-pip-version-check'],
+                    PIP_INSTALL_TIMEOUT_MS,
+                    venvPython
+                );
                 pushLog('success', 'Basic dependencies installed', 'pip');
 
                 // Validate that email-validator is actually installed
                 pushLog('info', 'Validating email-validator installation...', 'pip');
                 try {
-                    await runStreamingCommand('python', ['-c', 'import email_validator; print(f"email-validator version: {email_validator.__version__}")'], tempDir, 'pip', 30000);
+                    await verifyEmailValidatorWithPython(projectRootPath, venvPython);
                     pushLog('success', 'email-validator is installed and working correctly', 'pip');
-                } catch (validationError) {
-                    pushLog('error', 'email-validator validation failed after default installation', 'pip');
-                    await cleanupTempDir(tempDir);
-                    return {
-                        success: false,
-                        error: 'Failed to install email-validator dependency',
-                        data: {
+                } catch {
+                    pushLog('warning', 'email-validator validation failed after default installation, retrying with python -m pip...', 'pip');
+                    try {
+                        await installEmailValidatorWithPythonPip(projectRootPath, venvPython);
+                        await verifyEmailValidatorWithPython(projectRootPath, venvPython);
+                        pushLog('success', 'email-validator installed successfully via python -m pip fallback', 'pip');
+                    } catch (fallbackInstallError) {
+                        const error = fallbackInstallError as Error;
+                        pushLog('error', `Failed to install email-validator: ${error.message}`, 'pip');
+                        await cleanupTempDir(tempDir);
+                        return {
                             success: false,
-                            message: 'email-validator is required for Pydantic EmailStr fields but could not be installed',
-                            failureType: 'import_error',
-                            details: 'Default installation did not include email-validator',
-                            logs,
-                            validation
-                        }
-                    };
+                            error: 'Failed to install email-validator dependency',
+                            data: {
+                                success: false,
+                                message: 'email-validator is required for Pydantic EmailStr fields but could not be installed',
+                                failureType: 'import_error',
+                                details: error.message,
+                                logs,
+                                validation
+                            }
+                        };
+                    }
                 }
             }
         } catch (error: unknown) {
@@ -382,15 +473,9 @@ export const runBackend = async ({ projectId, onLog }: RunBackendParams): Promis
             };
         }
 
-        const mainRelativePath = toProjectRelativePath(mainFile);
-
         pushLog('system', 'Validating Python syntax...', 'python');
         try {
-            try {
-                await runStreamingCommand('python', ['-m', 'py_compile', mainRelativePath], tempDir, 'python');
-            } catch {
-                await runStreamingCommand('python3', ['-m', 'py_compile', mainRelativePath], tempDir, 'python');
-            }
+            await runStreamingCommand(venvPython, ['-m', 'py_compile', entryFileName], projectRootPath, 'python');
             pushLog('success', 'Python syntax validation passed', 'python');
         } catch (error: unknown) {
             const syntaxError = error as { message?: string };
@@ -418,11 +503,11 @@ export const runBackend = async ({ projectId, onLog }: RunBackendParams): Promis
 
         // Run the FastAPI server
         const port = await getAvailablePort();
-        const moduleName = mainRelativePath.replace(/\.py$/i, '').replace(/\//g, '.');
+        const moduleName = entryModuleName;
         pushLog('system', `Starting FastAPI server on port ${port}...`, 'uvicorn');
 
-        const serverProcess = spawn('uvicorn', [`${moduleName}:app`, '--host', '0.0.0.0', '--port', String(port)], {
-            cwd: tempDir,
+        const serverProcess = spawn(venvPython, ['-m', 'uvicorn', `${moduleName}:app`, '--host', '0.0.0.0', '--port', String(port)], {
+            cwd: projectRootPath,
             shell: false,
             env: process.env
         });
@@ -505,14 +590,18 @@ export const runBackend = async ({ projectId, onLog }: RunBackendParams): Promis
             await cleanupTempDir(tempDir);
 
             const combinedError = uvicornErrors.join(' | ').toLowerCase();
-            const failureType: BackendRunResult['failureType'] =
-                combinedError.includes('address already in use') || combinedError.includes('port')
-                    ? 'port_conflict'
-                    : combinedError.includes('importerror') || combinedError.includes('modulenotfounderror')
-                      ? 'import_error'
-                      : exitedBeforeReady && startupExitCode !== 0
-                        ? 'startup_error'
-                        : 'timeout';
+            const isPortConflict =
+                combinedError.includes('address already in use') ||
+                combinedError.includes('eaddrinuse') ||
+                combinedError.includes('errno 48') ||
+                combinedError.includes('cannot assign requested address');
+            const failureType: BackendRunResult['failureType'] = isPortConflict
+                ? 'port_conflict'
+                : combinedError.includes('importerror') || combinedError.includes('modulenotfounderror')
+                  ? 'import_error'
+                  : exitedBeforeReady && startupExitCode !== 0
+                    ? 'startup_error'
+                    : 'timeout';
 
             // Provide more specific error messages for common issues
             let errorMessage = 'Failed to start FastAPI server';
@@ -530,7 +619,7 @@ export const runBackend = async ({ projectId, onLog }: RunBackendParams): Promis
                     errorDetails = `The required Python module "${missingModule[1]}" is not installed.\n\nError details:\n${uvicornErrors.join('\n')}\n\nPlease ensure all required dependencies are installed from requirements.txt.`;
                     pushLog('error', `Missing dependency detected: ${missingModule[1]}`, 'uvicorn');
                 }
-            } else if (combinedError.includes('address already in use') || combinedError.includes('port')) {
+            } else if (isPortConflict) {
                 errorMessage = 'Failed to start server: port conflict';
                 pushLog('error', 'Port conflict detected during server startup', 'uvicorn');
             }
@@ -657,6 +746,284 @@ async function validateGeneratedFiles(
     };
 }
 
+async function runTypeScriptBackend({
+    project,
+    files,
+    tempDir,
+    logs,
+    pushLog,
+    runStreamingCommand
+}: {
+    project: { name: string; description: string; framework: string; language: string };
+    files: File[];
+    tempDir: string;
+    logs: BackendLogEntry[];
+    pushLog: (type: BackendLogEntry['type'], message: string, source?: string) => void;
+    runStreamingCommand: (command: string, args: string[], cwd: string, source: string, timeoutMs?: number) => Promise<void>;
+}): Promise<RunBackendResponse> {
+    const entryFile = files.find((f: File) => {
+        const relativePath = toProjectRelativePath(f);
+        return (
+            relativePath === 'src/index.ts' ||
+            relativePath === 'src/main.ts' ||
+            relativePath === 'index.ts' ||
+            relativePath === 'app.ts' ||
+            relativePath === 'src/app.ts' ||
+            relativePath === 'src/index.js' ||
+            relativePath === 'index.js'
+        );
+    });
+
+    if (!entryFile) {
+        return { success: false, error: 'No TypeScript/JavaScript backend entry file found' };
+    }
+
+    const entryRelativePath = toProjectRelativePath(entryFile);
+    const projectRootRelative = dirname(entryRelativePath) === '.' ? '' : dirname(entryRelativePath);
+    const projectRootPath = projectRootRelative ? join(tempDir, projectRootRelative) : tempDir;
+    const packageJsonFile = files.find((f: File) => {
+        const relativePath = toProjectRelativePath(f);
+        return relativePath === 'package.json' || relativePath.endsWith('/package.json');
+    });
+
+    await mkdir(tempDir, { recursive: true });
+    pushLog('info', `Created temporary workspace: ${tempDir}`, 'backend-runner');
+
+    const filesList: string[] = [];
+    for (const file of files) {
+        try {
+            const result = await fetchFileContent({ fileId: file._id });
+            if (!result.success) {
+                throw new Error(result.error);
+            }
+
+            const relativePath = toProjectRelativePath(file);
+            const filePath = join(tempDir, relativePath);
+            await mkdir(dirname(filePath), { recursive: true });
+            await writeFile(filePath, result.content, 'utf-8');
+            filesList.push(relativePath);
+            pushLog('info', `Downloaded and wrote file: ${relativePath}`, 'downloader');
+        } catch (error) {
+            pushLog('error', `Failed to download file ${file.name}: ${error instanceof Error ? error.message : String(error)}`, 'downloader');
+        }
+    }
+
+    let startCommand: { cmd: string; args: string[] } = {
+        cmd: 'pnpm',
+        args: ['dlx', 'tsx', entryRelativePath.slice(projectRootRelative ? projectRootRelative.length + 1 : 0)]
+    };
+
+    if (packageJsonFile) {
+        const packageJsonPath = join(projectRootPath, 'package.json');
+        const lockFilePath = join(projectRootPath, 'pnpm-lock.yaml');
+
+        pushLog('system', 'Installing Node.js dependencies...', 'node');
+        try {
+            if (existsSync(lockFilePath)) {
+                await runStreamingCommand('pnpm', ['install', '--frozen-lockfile', '--ignore-scripts'], projectRootPath, 'node', 240000);
+            } else {
+                await runStreamingCommand('pnpm', ['install', '--ignore-scripts'], projectRootPath, 'node', 240000);
+            }
+        } catch (error) {
+            await cleanupTempDir(tempDir);
+            return {
+                success: false,
+                error: `Failed to install Node.js dependencies: ${error instanceof Error ? error.message : String(error)}`,
+                data: {
+                    success: false,
+                    message: 'Failed to install Node.js dependencies',
+                    logs
+                }
+            };
+        }
+
+        try {
+            const packageJsonContent = await readFile(packageJsonPath, 'utf-8');
+            const packageJson = JSON.parse(packageJsonContent) as { scripts?: Record<string, string> };
+
+            if (packageJson.scripts?.dev) {
+                startCommand = { cmd: 'pnpm', args: ['run', 'dev'] };
+            } else if (packageJson.scripts?.start) {
+                startCommand = { cmd: 'pnpm', args: ['run', 'start'] };
+            }
+        } catch {
+            pushLog('warning', 'Failed to parse package.json scripts, falling back to tsx entrypoint startup', 'node');
+        }
+    } else {
+        pushLog('warning', 'package.json not found, installing minimal Feathers/TypeScript runtime dependencies', 'node');
+        try {
+            await runStreamingCommand(
+                'pnpm',
+                ['add', '@feathersjs/feathers', '@feathersjs/koa', '@feathersjs/socketio', 'typescript', 'ts-node', '--ignore-scripts'],
+                projectRootPath,
+                'node',
+                240000
+            );
+        } catch (error) {
+            await cleanupTempDir(tempDir);
+            return {
+                success: false,
+                error: `Failed to install minimal Node.js dependencies: ${error instanceof Error ? error.message : String(error)}`,
+                data: {
+                    success: false,
+                    message: 'Failed to install minimal Node.js dependencies',
+                    logs
+                }
+            };
+        }
+    }
+
+    const port = await getAvailablePort();
+    const childEnv: NodeJS.ProcessEnv = {
+        ...process.env,
+        PORT: String(port),
+        NODE_ENV: 'development'
+    };
+    pushLog('system', `Starting TypeScript/Feathers server on port ${port}...`, 'node');
+
+    const serverProcess: ChildProcessWithoutNullStreams = spawn(startCommand.cmd, startCommand.args, {
+        cwd: projectRootPath,
+        shell: false,
+        env: childEnv
+    });
+
+    const processErrors: string[] = [];
+    let exitedBeforeReady = false;
+    let startupExitCode: number | null = null;
+
+    serverProcess.stdout?.on('data', (chunk: Buffer | string) => {
+        const lines = chunk
+            .toString()
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean);
+        for (const line of lines) {
+            pushLog('info', line, 'node');
+        }
+    });
+
+    serverProcess.stderr?.on('data', (chunk: Buffer | string) => {
+        const lines = chunk
+            .toString()
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean);
+        for (const line of lines) {
+            processErrors.push(line);
+            pushLog('warning', line, 'node');
+        }
+    });
+
+    serverProcess.on('error', (error: Error) => {
+        processErrors.push(error.message);
+        pushLog('error', `Failed to spawn process: ${error.message}`, 'node');
+    });
+
+    serverProcess.on('close', (code: number | null) => {
+        startupExitCode = code;
+        exitedBeforeReady = true;
+        pushLog('warning', `Node process exited with code ${code ?? 'unknown'}`, 'node');
+    });
+
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    const healthUrls = [`http://localhost:${port}/health`, `http://localhost:${port}`, `http://localhost:${port}/docs`];
+
+    let serverRunning = false;
+    for (let attempt = 1; attempt <= HEALTH_CHECK_RETRIES; attempt++) {
+        if (exitedBeforeReady) {
+            break;
+        }
+
+        for (const url of healthUrls) {
+            try {
+                const healthCheck = await fetch(url, { signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS) });
+                if (healthCheck.ok || healthCheck.status === 404) {
+                    serverRunning = true;
+                    pushLog('success', `Server health check passed on attempt ${attempt}/${HEALTH_CHECK_RETRIES}`, 'node');
+                    break;
+                }
+            } catch {
+                // ignore and retry
+            }
+        }
+
+        if (serverRunning) {
+            break;
+        }
+
+        if (attempt < HEALTH_CHECK_RETRIES) {
+            await wait(HEALTH_CHECK_RETRY_DELAY_MS);
+        }
+    }
+
+    if (!serverRunning) {
+        if (!serverProcess.killed) {
+            serverProcess.kill('SIGTERM');
+        }
+        await cleanupTempDir(tempDir);
+
+        const combinedError = processErrors.join(' | ').toLowerCase();
+        const isPortConflict = combinedError.includes('address already in use') || combinedError.includes('eaddrinuse') || combinedError.includes('errno 48');
+
+        return {
+            success: false,
+            error: 'Failed to start TypeScript/Feathers server',
+            data: {
+                success: false,
+                message: 'Failed to start TypeScript/Feathers server',
+                failureType: isPortConflict ? 'port_conflict' : exitedBeforeReady && startupExitCode !== 0 ? 'startup_error' : 'timeout',
+                details: processErrors.join('\n') || 'Server health check failed before readiness',
+                logs,
+                files: {
+                    total: files.length,
+                    mainFile: entryRelativePath,
+                    hasRequirements: false,
+                    filesList
+                },
+                validation: {
+                    filesValid: true,
+                    mainFileValid: true,
+                    requirementsValid: true,
+                    errors: []
+                }
+            }
+        };
+    }
+
+    return {
+        success: true,
+        data: {
+            success: true,
+            message: 'TypeScript/Feathers backend server started successfully',
+            project: {
+                name: project.name,
+                description: project.description
+            },
+            logs,
+            files: {
+                total: files.length,
+                mainFile: entryRelativePath,
+                hasRequirements: false,
+                filesList
+            },
+            server: {
+                pid: serverProcess.pid || 0,
+                port,
+                url: `http://localhost:${port}`,
+                docsUrl: `http://localhost:${port}/docs`,
+                redocUrl: `http://localhost:${port}/redoc`,
+                openapiUrl: `http://localhost:${port}/openapi.json`
+            },
+            validation: {
+                filesValid: true,
+                mainFileValid: true,
+                requirementsValid: true,
+                errors: []
+            }
+        }
+    };
+}
+
 async function cleanupTempDir(tempDir: string) {
     try {
         if (existsSync(tempDir)) {
@@ -704,7 +1071,7 @@ async function getAvailablePort(): Promise<number> {
  * that all necessary SQLAlchemy imports are present, including the Base class.
  */
 async function fixModelFileImports(tempDir: string, filesList: string[]): Promise<void> {
-    const modelFiles = filesList.filter((file) => file.startsWith('app/models/') && file.endsWith('.py'));
+    const modelFiles = filesList.filter((file) => file.endsWith('.py') && !file.endsWith('tests.py') && !file.includes('/test'));
 
     if (modelFiles.length === 0) {
         return;
@@ -713,25 +1080,63 @@ async function fixModelFileImports(tempDir: string, filesList: string[]): Promis
     for (const modelFile of modelFiles) {
         const filePath = join(tempDir, modelFile);
         try {
-            let content = await readFile(filePath, 'utf-8');
+            const content = await readFile(filePath, 'utf-8');
+
+            const usesSqlalchemyColumns = /\bColumn\s*\(/.test(content) && /\bsqlalchemy\b|from\s+sqlalchemy\s+import/.test(content);
+            if (!usesSqlalchemyColumns) {
+                continue;
+            }
+
+            let updatedContent = content;
+
+            // Fix invalid SQLAlchemy column type usage: Column(EmailStr, ...) -> Column(String, ...)
+            updatedContent = updatedContent.replace(/Column\(\s*EmailStr\b/g, 'Column(String');
+
+            // Fix forward reference NameError in SQLAlchemy relationships:
+            // foreign_keys=[Follow.follower_id] -> foreign_keys="[Follow.follower_id]"
+            // This allows SQLAlchemy to resolve it lazily instead of requiring Follow to be defined at import time.
+            updatedContent = updatedContent.replace(/foreign_keys\s*=\s*\[\s*([A-Z][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*)\s*\]/g, 'foreign_keys="[$1]"');
 
             // Check if the file uses Base class
-            const hasBaseClass = /\bclass\s+\w+\s*\(\s*Base\s*\)/.test(content);
+            const hasBaseClass = /\bclass\s+\w+\s*\(\s*Base\s*\)/.test(updatedContent);
 
             if (!hasBaseClass) {
-                continue; // Skip if file doesn't use Base class
+                // Write type fixes even if declarative Base isn't present
+                if (updatedContent !== content) {
+                    await writeFile(filePath, updatedContent, 'utf-8');
+                    console.log(`Fixed SQLAlchemy type usage in file: ${modelFile}`);
+                }
+                continue;
             }
 
             // Check if Base is imported or defined
-            const hasBaseImport = /from\s+sqlalchemy\.orm\s+import.*declarative_base|Base\s*=\s*declarative_base\(\)/.test(content);
+            const hasBaseImport = /from\s+sqlalchemy\.orm\s+import.*declarative_base|Base\s*=\s*declarative_base\(\)/.test(updatedContent);
+
+            // Ensure String is imported when used in Column(String, ...)
+            const sqlalchemyImportRegex = /from\s+sqlalchemy\s+import\s+([^\n]+)/;
+            const sqlalchemyImportMatch = updatedContent.match(sqlalchemyImportRegex);
+            if (sqlalchemyImportMatch) {
+                const importedTypes = (sqlalchemyImportMatch[1] || '').split(',').map((s) => s.trim());
+                if (!importedTypes.includes('String') && /Column\(\s*String\b/.test(updatedContent)) {
+                    importedTypes.push('String');
+                    const uniqueTypes = Array.from(new Set(importedTypes));
+                    updatedContent = updatedContent.replace(sqlalchemyImportRegex, `from sqlalchemy import ${uniqueTypes.join(', ')}`);
+                }
+            } else if (/Column\(\s*String\b/.test(updatedContent)) {
+                updatedContent = `from sqlalchemy import String\n${updatedContent}`;
+            }
 
             if (hasBaseImport) {
-                continue; // Skip if Base is already imported
+                if (updatedContent !== content) {
+                    await writeFile(filePath, updatedContent, 'utf-8');
+                    console.log(`Fixed model file: ${modelFile}`);
+                }
+                continue;
             }
 
             // Check what imports are already present
-            const hasSqlalchemyImports = /from\s+sqlalchemy\s+import/.test(content);
-            const hasDateTimeImport = /from\s+datetime\s+import/.test(content);
+            const hasSqlalchemyImports = /from\s+sqlalchemy\s+import/.test(updatedContent);
+            const hasDateTimeImport = /from\s+datetime\s+import/.test(updatedContent);
 
             // Build the necessary imports
             const importsToAdd: string[] = [];
@@ -740,9 +1145,9 @@ async function fixModelFileImports(tempDir: string, filesList: string[]): Promis
                 importsToAdd.push('from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey');
             } else {
                 // Add missing Column types if sqlalchemy is imported
-                const existingImports = content.match(/from\s+sqlalchemy\s+import\s+([^\n]+)/);
+                const existingImports = updatedContent.match(/from\s+sqlalchemy\s+import\s+([^\n]+)/);
                 if (existingImports) {
-                    const importedTypes = existingImports[1].split(',').map((s) => s.trim());
+                    const importedTypes = (existingImports[1] || '').split(',').map((s) => s.trim());
                     const requiredTypes = ['Column', 'Integer', 'String', 'Boolean', 'DateTime', 'ForeignKey'];
                     const missingTypes = requiredTypes.filter((type) => !importedTypes.includes(type));
                     if (missingTypes.length > 0) {
@@ -764,16 +1169,20 @@ async function fixModelFileImports(tempDir: string, filesList: string[]): Promis
             importsToAdd.push('Base = declarative_base()');
 
             if (importsToAdd.length === 0) {
+                if (updatedContent !== content) {
+                    await writeFile(filePath, updatedContent, 'utf-8');
+                    console.log(`Fixed model file: ${modelFile}`);
+                }
                 continue;
             }
 
             // Find the position to insert imports (after existing imports or at the beginning)
-            const lines = content.split('\n');
+            const lines = updatedContent.split('\n');
             let insertIndex = 0;
 
             // Find the last import statement
             for (let i = 0; i < lines.length; i++) {
-                const trimmedLine = lines[i].trim();
+                const trimmedLine = (lines[i] || '').trim();
                 if (trimmedLine.startsWith('from ') || trimmedLine.startsWith('import ')) {
                     insertIndex = i + 1;
                 } else if (trimmedLine && !trimmedLine.startsWith('#') && insertIndex > 0) {

@@ -20,6 +20,8 @@ export function InitialScreen({ currentUser }: InitialScreenProps) {
         enhanceLoading,
         handleEnhancePrompt,
         handleSendPrompt,
+        selectedStack,
+        setSelectedStack,
         creationState,
         isPreprocessing,
         showMorphLoading,
@@ -38,6 +40,8 @@ export function InitialScreen({ currentUser }: InitialScreenProps) {
                 enhanceLoading={enhanceLoading}
                 sending={isPreprocessing}
                 isMorphing={isMorphing}
+                selectedStack={selectedStack}
+                onStackChange={setSelectedStack}
             />
             <ProjectPreparationOverlay visible={showMorphLoading} state={creationState} />
         </div>

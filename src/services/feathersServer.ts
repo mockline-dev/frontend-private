@@ -20,6 +20,7 @@ export const createFeathersServerClient = async () => {
         'enhance-prompt': RestService;
         'infer-project-meta': RestService;
         snapshots: RestService;
+        architecture: RestService;
     };
 
     const app = feathers<ServiceTypes>();

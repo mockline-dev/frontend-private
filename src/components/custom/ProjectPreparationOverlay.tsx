@@ -19,7 +19,7 @@ const toStageLabel = (stage: string | undefined): string => {
 };
 
 export default function ProjectPreparationOverlay({ visible, state }: ProjectPreparationOverlayProps) {
-    const [showLoader, setShowLoader] = useState(false);
+    const [showLoader, setShowLoader] = useState(true);
 
     useEffect(() => {
         if (visible) {
@@ -46,7 +46,7 @@ export default function ProjectPreparationOverlay({ visible, state }: ProjectPre
             exit={{ opacity: 0 }}
         >
             <div className="w-full max-w-md rounded-2xl border border-black/10 bg-white/80 shadow-2xl p-8 text-center space-y-5">
-                <div className="flex justify-center">
+                <div className="flex justify-center h-24">
                     <UniqueLoading variant="morph" size="lg" className="w-full h-full" />
                 </div>
 

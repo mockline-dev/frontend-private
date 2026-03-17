@@ -315,8 +315,8 @@ export const runBackend = async ({ projectId, onLog }: RunBackendParams): Promis
                 try {
                     await runStreamingCommand('python', ['-c', 'import email_validator; print(f"email-validator version: {email_validator.__version__}")'], tempDir, 'pip', 30000);
                     pushLog('success', 'email-validator is installed and working correctly', 'pip');
-                } catch (validationError) {
-                    pushLog('warning', 'email-validator validation failed, attempting to install it separately...', 'pip');
+                } catch (validationError: unknown) {
+                    pushLog('warning', `email-validator validation failed: ${validationError instanceof Error ? validationError.message : String(validationError)}, attempting to install it separately...`, 'pip');
                     try {
                         await runStreamingCommand('pip', ['install', 'email-validator', '--disable-pip-version-check'], tempDir, 'pip', 60000);
                         pushLog('success', 'email-validator installed successfully via separate installation', 'pip');
@@ -348,8 +348,8 @@ export const runBackend = async ({ projectId, onLog }: RunBackendParams): Promis
                 try {
                     await runStreamingCommand('python', ['-c', 'import email_validator; print(f"email-validator version: {email_validator.__version__}")'], tempDir, 'pip', 30000);
                     pushLog('success', 'email-validator is installed and working correctly', 'pip');
-                } catch (validationError) {
-                    pushLog('error', 'email-validator validation failed after default installation', 'pip');
+                } catch (validationError: unknown) {
+                    pushLog('error', `email-validator validation failed after default installation: ${validationError instanceof Error ? validationError.message : String(validationError)}`, 'pip');
                     await cleanupTempDir(tempDir);
                     return {
                         success: false,
@@ -713,7 +713,7 @@ async function fixModelFileImports(tempDir: string, filesList: string[]): Promis
     for (const modelFile of modelFiles) {
         const filePath = join(tempDir, modelFile);
         try {
-            let content = await readFile(filePath, 'utf-8');
+            const content = await readFile(filePath, 'utf-8');
 
             // Check if the file uses Base class
             const hasBaseClass = /\bclass\s+\w+\s*\(\s*Base\s*\)/.test(content);
@@ -741,7 +741,7 @@ async function fixModelFileImports(tempDir: string, filesList: string[]): Promis
             } else {
                 // Add missing Column types if sqlalchemy is imported
                 const existingImports = content.match(/from\s+sqlalchemy\s+import\s+([^\n]+)/);
-                if (existingImports) {
+                if (existingImports && existingImports[1]) {
                     const importedTypes = existingImports[1].split(',').map((s) => s.trim());
                     const requiredTypes = ['Column', 'Integer', 'String', 'Boolean', 'DateTime', 'ForeignKey'];
                     const missingTypes = requiredTypes.filter((type) => !importedTypes.includes(type));
@@ -773,7 +773,7 @@ async function fixModelFileImports(tempDir: string, filesList: string[]): Promis
 
             // Find the last import statement
             for (let i = 0; i < lines.length; i++) {
-                const trimmedLine = lines[i].trim();
+                const trimmedLine = lines[i]?.trim() || '';
                 if (trimmedLine.startsWith('from ') || trimmedLine.startsWith('import ')) {
                     insertIndex = i + 1;
                 } else if (trimmedLine && !trimmedLine.startsWith('#') && insertIndex > 0) {

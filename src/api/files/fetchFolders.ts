@@ -13,7 +13,7 @@ export const fetchFolders = async (params?: FetchFoldersParams): Promise<FetchFo
     try {
         const server = await createFeathersServerClient();
         const query = params?.query || {};
-        const result = await server.service(apiServices.files).find({ ...query, isFolder: true });
+        const result = await server.service(apiServices.files).find({ query: { ...query, isFolder: true } });
         return { success: true, data: JSON.parse(JSON.stringify(result)) };
     } catch (err: unknown) {
         console.error('Failed to fetch folders:', err);

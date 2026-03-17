@@ -136,6 +136,13 @@ function parseFileUpdatesFromContent(content: string): FileUpdate[] {
 
         if (!filename) continue;
 
+        if (action === 'modify' && !SEARCH_REPLACE_BLOCK_PATTERN.test(nextContent)) {
+            SEARCH_REPLACE_BLOCK_PATTERN.lastIndex = 0;
+            continue;
+        }
+
+        SEARCH_REPLACE_BLOCK_PATTERN.lastIndex = 0;
+
         updates.push({
             filename,
             action,

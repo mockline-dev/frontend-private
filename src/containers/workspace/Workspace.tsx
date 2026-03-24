@@ -3,17 +3,14 @@
 import { fetchFileContent } from '@/api/files/fetchFileContent';
 import { downloadProject } from '@/api/projects/downloadProject';
 import { createUpload } from '@/api/uploads/createUpload';
-import { ArchitectureGraph } from '@/components/custom/ArchitectureGraph';
-import { FileTree } from '@/components/custom/FileTree';
-import { MonacoEditor } from '@/components/custom/MonacoEditor';
 import { ProjectCreationLoader } from '@/components/custom/ProjectCreationLoader';
-import { UserMenu } from '@/components/custom/UserMenu';
-import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { defaultAiModel } from '@/config/environment';
-import { AiAgent } from '@/containers/aiAgent/AIAgent';
-import { Terminal } from '@/containers/workspace/components/Terminal';
-import { TestPanel } from '@/containers/workspace/components/TestPanel';
+import { EditorPanel } from '@/containers/workspace/components/EditorPanel';
+import { WorkspaceHeader } from '@/containers/workspace/components/WorkspaceHeader';
+import { WorkspaceSidebar } from '@/containers/workspace/components/WorkspaceSidebar';
+import { WorkspaceStatusBar } from '@/containers/workspace/components/WorkspaceStatusBar';
+import { buildFileTree, getDisplayPath } from '@/containers/workspace/utils/fileTree';
 import { useArchitecture } from '@/hooks/useArchitecture';
 import { useFiles } from '@/hooks/useFiles';
 import { useProjectCreation } from '@/hooks/useProjectCreation';
@@ -22,25 +19,15 @@ import { useProjects } from '@/hooks/useProjects';
 import { useProjectChannel } from '@/hooks/useRealtimeUpdates';
 import { useSnapshots } from '@/hooks/useSnapshots';
 import type { Project, ProjectFile } from '@/types/feathers';
+import type { ActiveView, CursorPosition, SidebarView } from '@/types/workspace';
+import { QuickOpen } from '@/components/custom/QuickOpen';
+import { useOpenTabs } from '@/hooks/useOpenTabs';
+import { flattenFileTree } from '@/containers/workspace/utils/fileTree';
 import { clearSavedPrompt, getSavedPrompt } from '@/utils/promptStorage';
-import {
-    Bot,
-    ChevronRight,
-    Code2,
-    Download,
-    FolderTree,
-    History,
-    Layers,
-    Loader2,
-    Play,
-    RotateCcw,
-    Save,
-    Terminal as TerminalIcon,
-    TestTube2,
-    Trash2
-} from 'lucide-react';
+import { Terminal as TerminalIcon } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { UserData } from '../auth/types';
 
@@ -61,14 +48,19 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     const [currentProjectId, setCurrentProjectId] = useState<string | undefined>(initialProjectId || initialProject?._id);
     const [selectedFile, setSelectedFile] = useState<string | null>(null);
     const [selectedFileContent, setSelectedFileContent] = useState<string>('');
-    const [sidebarView, setSidebarView] = useState<'files' | 'ai' | 'versions'>('files');
-    const [activeView, setActiveView] = useState<'code' | 'api' | 'architecture'>('code');
+    const [sidebarView, setSidebarView] = useState<SidebarView>('files');
+    const [activeView, setActiveView] = useState<ActiveView>('code');
     const [isTerminalOpen, setIsTerminalOpen] = useState(false);
     const [isRunning, setIsRunning] = useState(false);
     const [isBackendReady, setIsBackendReady] = useState(false);
     const [isSnapshotCreating, setIsSnapshotCreating] = useState(false);
     const [snapshotActionId, setSnapshotActionId] = useState<string | null>(null);
     const [loadingContent, setLoadingContent] = useState(false);
+    const [cursorPosition, setCursorPosition] = useState<CursorPosition | undefined>(undefined);
+    const [quickOpenOpen, setQuickOpenOpen] = useState(false);
+    const [recentFiles, setRecentFiles] = useState<string[]>([]);
+
+    const { tabs, activeTabId, openTab, closeTab, setActiveTab, markDirty, markClean, hasUnsavedChanges } = useOpenTabs();
 
     const creationTriggeredRef = useRef(false);
 
@@ -91,69 +83,47 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     });
 
     const { currentProject, loadProject } = useProjects(initialProject ? [initialProject] : []);
-
     const { files, loadFiles, updateFile, currentFile, setCurrentFile } = useFiles(initialFiles);
-
     const { snapshots, loading: snapshotsLoading, createSnapshot, rollbackToSnapshot, deleteSnapshot, refresh: refreshSnapshots } = useSnapshots([]);
     const { architecture, loading: architectureLoading, error: architectureError, loadArchitecture } = useArchitecture();
 
     useProjectChannel(currentProjectId || null);
 
     useEffect(() => {
-        if (currentProjectId && isBrowser) {
-            loadProject(currentProjectId);
-        }
+        if (currentProjectId && isBrowser) loadProject(currentProjectId);
     }, [currentProjectId, loadProject, isBrowser]);
 
     useEffect(() => {
-        // Backend run state is scoped to the currently loaded project.
         setIsBackendReady(false);
-        if (activeView === 'api') {
-            setActiveView('code');
-        }
+        setActiveView((v) => v === 'api' ? 'code' : v);
     }, [currentProjectId]);
 
     useEffect(() => {
-        if (currentProjectId && isBrowser) {
-            loadFiles(currentProjectId);
-        }
+        if (currentProjectId && isBrowser) loadFiles(currentProjectId);
     }, [currentProjectId, loadFiles, isBrowser]);
 
     useEffect(() => {
-        if (currentProjectId && isBrowser) {
-            refreshSnapshots(currentProjectId);
-        }
+        if (currentProjectId && isBrowser) refreshSnapshots(currentProjectId);
     }, [currentProjectId, refreshSnapshots, isBrowser]);
 
     useEffect(() => {
-        if (currentProjectId && isBrowser) {
-            loadArchitecture(currentProjectId);
-        }
+        if (currentProjectId && isBrowser) loadArchitecture(currentProjectId);
     }, [currentProjectId, loadArchitecture, isBrowser]);
 
     useEffect(() => {
-        if (currentProject) {
-            setProjectName(currentProject.name);
-        }
+        if (currentProject) setProjectName(currentProject.name);
     }, [currentProject]);
 
     useEffect(() => {
         if (currentFile) {
             const displayPath = getDisplayPath(currentFile);
-            if (selectedFile !== displayPath) {
-                setSelectedFile(displayPath);
-            }
+            if (selectedFile !== displayPath) setSelectedFile(displayPath);
         }
     }, [currentFile, selectedFile]);
 
-    /**
-     * Creates a new project with given prompt.
-     * Uses useProjectCreation hook for comprehensive error handling.
-     */
     const handleCreateProject = useCallback(
         async (prompt: string) => {
             if (isCreating) return;
-
             try {
                 await createProject({
                     name: prompt.length > 50 ? prompt.substring(0, 50) + '...' : prompt,
@@ -169,11 +139,6 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         [createProject, isCreating]
     );
 
-    /**
-     * Initializes workspace based on URL params or saved state.
-     * Handles project creation from prompt, loading existing project,
-     * or navigating to existing project.
-     */
     useEffect(() => {
         if (!isBrowser) return;
 
@@ -191,9 +156,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
             sessionStorage.setItem('projectInitialized', 'true');
         } else if (storedProjectId && !currentProjectId) {
             setCurrentProjectId(storedProjectId);
-            if (promptFromUrl) {
-                router.replace('/workspace');
-            }
+            if (promptFromUrl) router.replace('/workspace');
         } else if (prompt && !currentProjectId && !isCreating && !existingProjectId && !projectInitialized && !creationTriggeredRef.current) {
             console.log('[Workspace useEffect] Creating project, setting creationTriggeredRef to true');
             creationTriggeredRef.current = true;
@@ -204,23 +167,18 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         }
     }, [searchParams, currentProjectId, isCreating, handleCreateProject, router, isBrowser]);
 
-    /**
-     * Navigates to specified page.
-     */
     const handleNavigate = (page: 'dashboard' | 'workspace' | 'initial') => {
-        if (page === 'initial') {
-            router.push('/');
-        } else {
-            router.push(page === 'dashboard' ? '/dashboard' : '/workspace');
-        }
+        if (page === 'initial') router.push('/');
+        else router.push(page === 'dashboard' ? '/dashboard' : '/workspace');
     };
 
-    /**
-     * Handles file selection from file tree.
-     */
     const handleFileSelect = useCallback(
         async (filePath: string) => {
             setSelectedFile(filePath);
+            const fileName = filePath.split('/').pop() ?? filePath;
+            openTab({ id: filePath, filePath, fileName });
+            setRecentFiles((prev) => [filePath, ...prev.filter((p) => p !== filePath)].slice(0, 5));
+
             const file = files.find((f) => getDisplayPath(f) === filePath || f.name === filePath);
             if (file) {
                 setCurrentFile(file);
@@ -237,15 +195,13 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                 }
             }
         },
-        [files, setCurrentFile]
+        [files, setCurrentFile, openTab]
     );
 
-    /**
-     * Handles editor content changes.
-     */
     const handleContentChange = useCallback((value: string | undefined) => {
         setSelectedFileContent(value || '');
-    }, []);
+        if (selectedFile) markDirty(selectedFile);
+    }, [selectedFile, markDirty]);
 
     const handleAIAppliedFile = useCallback(
         async (event: { action: 'create' | 'modify' | 'delete'; filename: string; content?: string }) => {
@@ -268,35 +224,29 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         [currentProjectId, selectedFile, loadFiles]
     );
 
-    /**
-     * Saves the current file content.
-     */
     const handleSaveFile = useCallback(async () => {
         if (!currentProjectId || !currentFile) return;
-
         try {
             await updateFile(currentFile._id, {
                 size: new TextEncoder().encode(selectedFileContent).length,
                 currentVersion: (currentFile.currentVersion || 1) + 1
             });
-
             await createUpload({
                 key: currentFile.key,
                 content: selectedFileContent,
                 contentType: 'text/plain',
                 projectId: currentProjectId
             });
-
             toast.success(`Saved: ${currentFile.name}`);
+            if (selectedFile) markClean(selectedFile);
         } catch (error) {
             console.error('Failed to save file:', error);
             toast.error('Failed to save file');
         }
-    }, [currentProjectId, currentFile, selectedFileContent, updateFile]);
+    }, [currentProjectId, currentFile, selectedFileContent, updateFile, selectedFile, markClean]);
 
     const handleCreateSnapshot = useCallback(async () => {
         if (!currentProjectId) return;
-
         setIsSnapshotCreating(true);
         try {
             await createSnapshot({
@@ -317,7 +267,6 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     const handleRollbackSnapshot = useCallback(
         async (snapshotId: string) => {
             if (!currentProjectId) return;
-
             setSnapshotActionId(snapshotId);
             try {
                 await rollbackToSnapshot(snapshotId);
@@ -336,7 +285,6 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     const handleDeleteSnapshot = useCallback(
         async (snapshotId: string) => {
             if (!currentProjectId) return;
-
             setSnapshotActionId(snapshotId);
             try {
                 await deleteSnapshot(snapshotId);
@@ -352,55 +300,45 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         [currentProjectId, deleteSnapshot, refreshSnapshots]
     );
 
+    const handleTabSelect = useCallback((tabId: string) => {
+        setActiveTab(tabId);
+        handleFileSelect(tabId);
+    }, [setActiveTab, handleFileSelect]);
+
+    const handleTabClose = useCallback((tabId: string) => {
+        const nextId = closeTab(tabId);
+        if (nextId) {
+            handleFileSelect(nextId);
+        } else {
+            setSelectedFile(null);
+            setSelectedFileContent('');
+        }
+    }, [closeTab, handleFileSelect]);
+
     useEffect(() => {
         if (!isBrowser) return;
-
         const handler = (e: KeyboardEvent) => {
             const isMeta = e.metaKey || e.ctrlKey;
-            if (isMeta && e.key === 's') {
-                e.preventDefault();
-                handleSaveFile();
-            }
-            if (isMeta && e.key === 'b') {
-                e.preventDefault();
-                setSidebarView((prev) => (prev === 'files' ? 'ai' : 'files'));
-            }
-            if (isMeta && e.key === 'j') {
-                e.preventDefault();
-                setIsTerminalOpen((prev) => !prev);
-            }
-            if (isMeta && e.shiftKey && e.key === 'M') {
-                e.preventDefault();
-                setSidebarView('ai');
-            }
+            if (isMeta && e.key === 's') { e.preventDefault(); handleSaveFile(); }
+            if (isMeta && e.key === 'b') { e.preventDefault(); setSidebarView((prev) => (prev === 'files' ? 'ai' : 'files')); }
+            if (isMeta && e.key === 'j') { e.preventDefault(); setIsTerminalOpen((prev) => !prev); }
+            if (isMeta && e.shiftKey && e.key === 'M') { e.preventDefault(); setSidebarView('ai'); }
+            if (isMeta && e.key === 'w') { e.preventDefault(); if (activeTabId) handleTabClose(activeTabId); }
+            if (isMeta && e.key === 'p') { e.preventDefault(); setQuickOpenOpen(true); }
         };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
-    }, [handleSaveFile, isBrowser]);
+    }, [handleSaveFile, isBrowser, activeTabId, handleTabClose]);
 
-    /**
-     * Downloads project as a ZIP file.
-     */
     const handleDownload = useCallback(async () => {
-        if (!currentProjectId) {
-            toast.error('No project selected');
-            return;
-        }
+        if (!currentProjectId) { toast.error('No project selected'); return; }
         try {
             const result = await downloadProject({ projectId: currentProjectId });
-            console.log('====================================');
-            console.log(result);
-            console.log('====================================');
-
-            if (!result.success) {
-                throw new Error(result.error);
-            }
+            if (!result.success) throw new Error(result.error);
 
             const zipData = atob(result.data.zipBase64);
             const zipArray = new Uint8Array(zipData.length);
-            for (let i = 0; i < zipData.length; i++) {
-                zipArray[i] = zipData.charCodeAt(i);
-            }
+            for (let i = 0; i < zipData.length; i++) zipArray[i] = zipData.charCodeAt(i);
             const blob = new Blob([zipArray], { type: 'application/zip' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -414,24 +352,12 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         }
     }, [currentProjectId]);
 
-    /**
-     * Runs backend server for current project via SSE streaming.
-     * Logs appear in real-time as the process executes.
-     */
     const handleRunBackend = useCallback(async () => {
-        if (!currentProjectId) {
-            toast.error('No project selected');
-            return;
-        }
+        if (!currentProjectId) { toast.error('No project selected'); return; }
 
         setIsRunning(true);
         setIsTerminalOpen(true);
-        emitProjectLog({
-            projectId: currentProjectId,
-            type: 'system',
-            message: 'Starting backend run pipeline...',
-            source: 'workspace'
-        });
+        emitProjectLog({ projectId: currentProjectId, type: 'system', message: 'Starting backend run pipeline...', source: 'workspace' });
 
         try {
             const response = await fetch('/api/run-backend', {
@@ -440,9 +366,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                 body: JSON.stringify({ projectId: currentProjectId })
             });
 
-            if (!response.ok || !response.body) {
-                throw new Error(`Failed to start backend run: ${response.statusText}`);
-            }
+            if (!response.ok || !response.body) throw new Error(`Failed to start backend run: ${response.statusText}`);
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
@@ -461,71 +385,37 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                     try {
                         const data = JSON.parse(line.slice(6));
                         if (data.event === 'log') {
-                            emitProjectLog({
-                                projectId: currentProjectId,
-                                type: data.type,
-                                message: data.message,
-                                source: data.source || 'runner'
-                            });
+                            emitProjectLog({ projectId: currentProjectId, type: data.type, message: data.message, source: data.source || 'runner' });
                         } else if (data.event === 'done') {
-                            const result = data.result;
-                            if (result?.data?.success) {
+                            if (data.result?.data?.success) {
                                 setIsBackendReady(true);
                                 toast.success('Backend server started successfully!');
                             } else {
                                 setIsBackendReady(false);
-                                toast.error(result?.error || 'Failed to start backend');
+                                toast.error(data.result?.error || 'Failed to start backend');
                             }
                         } else if (data.event === 'error') {
-                            emitProjectLog({
-                                projectId: currentProjectId,
-                                type: 'error',
-                                message: data.message,
-                                source: 'runner'
-                            });
+                            emitProjectLog({ projectId: currentProjectId, type: 'error', message: data.message, source: 'runner' });
                             toast.error(data.message || 'Failed to start backend');
                         }
-                    } catch {
-                        // ignore parse errors on partial chunks
-                    }
+                    } catch { /* ignore parse errors on partial chunks */ }
                 }
             }
         } catch (error) {
             setIsBackendReady(false);
             console.error('Failed to run backend:', error);
-            emitProjectLog({
-                projectId: currentProjectId,
-                type: 'error',
-                message: error instanceof Error ? error.message : 'Failed to run backend',
-                source: 'workspace'
-            });
+            emitProjectLog({ projectId: currentProjectId, type: 'error', message: error instanceof Error ? error.message : 'Failed to run backend', source: 'workspace' });
             toast.error('Failed to start backend');
         } finally {
             setIsRunning(false);
         }
     }, [currentProjectId]);
 
-    /**
-     * Handles back to dashboard action.
-     */
-    const handleBackToDashboard = useCallback(() => {
-        resetState();
-        router.push('/dashboard');
-    }, [resetState, router]);
+    const handleBackToDashboard = useCallback(() => { resetState(); router.push('/dashboard'); }, [resetState, router]);
+    const handleRetry = useCallback(() => { resetState(); }, [resetState]);
 
-    /**
-     * Handles retry action.
-     */
-    const handleRetry = useCallback(() => {
-        resetState();
-    }, [resetState]);
-
-    /**
-     * Cleans up session storage when leaving workspace.
-     */
     useEffect(() => {
         if (!isBrowser) return;
-
         return () => {
             const currentPath = window.location.pathname;
             if (!currentPath.includes('/workspace')) {
@@ -535,19 +425,10 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         };
     }, [isBrowser]);
 
+    const updatingFiles = useMemo(() => new Set<string>(), []);
+
     const hasError = creationState.status === 'error' || currentProject?.status === 'error';
-
     const promptFromUrl = searchParams.get('prompt');
-
-    console.log('[Workspace] Loader check:', {
-        hasError,
-        isCreating,
-        creationStateStatus: creationState.status,
-        projectStatus: currentProject?.status,
-        promptFromUrl: !!promptFromUrl,
-        shouldShowLoader:
-            !hasError && (isCreating || (!isCreating && promptFromUrl) || (currentProject && currentProject.status !== 'ready' && currentProject.status !== 'error'))
-    });
 
     if (!hasError && (isCreating || (!isCreating && promptFromUrl) || (currentProject && currentProject.status !== 'ready' && currentProject.status !== 'error'))) {
         return (
@@ -576,402 +457,115 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     }
 
     const fileTree = files.length > 0 ? buildFileTree(files) : [];
+    const flatFiles = flattenFileTree(fileTree);
+
+    // Detect language for status bar
+    const activeFileName = selectedFile?.split('/').pop() ?? '';
+    const statusLanguage = activeFileName ? getLanguageFromFileName(activeFileName) : undefined;
 
     return (
         <div className="h-screen flex flex-col bg-white">
-            <div className="h-12 border-b border-gray-200 flex items-center justify-between px-4 bg-white">
-                <nav className="flex items-center gap-1 text-sm">
-                    <div className="w-6 h-6 bg-linear-to-br from-violet-500 to-purple-600 rounded-md flex items-center justify-center mr-1">
-                        <Code2 className="w-3.5 h-3.5 text-white" />
-                    </div>
-                    <button onClick={() => router.push('/dashboard')} className="text-gray-500 hover:text-gray-900 transition-colors">
-                        Dashboard
-                    </button>
-                    <ChevronRight className="w-3 h-3 text-gray-400" />
-                    <span className="text-gray-700 font-medium">{projectName.slice(0, 40)}</span>
-                    {selectedFile && activeView === 'code' && (
-                        <>
-                            <ChevronRight className="w-3 h-3 text-gray-400" />
-                            <span className="text-gray-900 font-semibold">{selectedFile}</span>
-                        </>
-                    )}
-                </nav>
-
-                <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center bg-gray-100 rounded-lg p-0.5">
-                    <button
-                        onClick={() => setActiveView('code')}
-                        className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
-                            activeView === 'code' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                    >
-                        <Code2 className="w-3.5 h-3.5" />
-                        Code
-                    </button>
-                    <button
-                        onClick={() => {
-                            if (!isBackendReady) {
-                                toast.info('Run backend first to enable API Testing');
-                                return;
-                            }
-                            setActiveView('api');
-                        }}
-                        disabled={!isBackendReady}
-                        className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
-                            activeView === 'api'
-                                ? 'bg-white text-gray-900 shadow-sm'
-                                : isBackendReady
-                                  ? 'text-gray-600 hover:text-gray-900'
-                                  : 'text-gray-400 cursor-not-allowed'
-                        }`}
-                    >
-                        <TestTube2 className="w-3.5 h-3.5" />
-                        API Testing
-                    </button>
-                    <button
-                        onClick={() => setActiveView('architecture')}
-                        className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
-                            activeView === 'architecture' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                    >
-                        <Layers className="w-3.5 h-3.5" />
-                        Architecture
-                    </button>
-                </div>
-
-                <div className="flex items-center gap-2">
-                    <Button onClick={handleDownload} disabled={!currentProjectId || files.length === 0} size="sm" variant="outline" className="h-7 text-xs">
-                        <Download className="w-3 h-3 mr-1" />
-                        Download
-                    </Button>
-                    <UserMenu currentUser={currentUser} currentPage="workspace" onNavigate={handleNavigate} />
-                </div>
-            </div>
+            <WorkspaceHeader
+                currentUser={currentUser}
+                projectName={projectName}
+                selectedFile={selectedFile}
+                activeView={activeView}
+                isBackendReady={isBackendReady}
+                currentProjectId={currentProjectId}
+                filesCount={files.length}
+                hasUnsavedChanges={hasUnsavedChanges}
+                onViewChange={setActiveView}
+                onDownload={handleDownload}
+                onNavigate={handleNavigate}
+            />
 
             <div className="flex-1 flex overflow-hidden">
                 <ResizablePanelGroup direction="horizontal" className="flex-1">
                     <ResizablePanel defaultSize={25} minSize={15}>
-                        <div className="h-full border-r border-gray-200 bg-white flex flex-col">
-                            <div className="border-b border-gray-200 flex">
-                                {(['files', 'ai', 'versions'] as const).map((view) => (
-                                    <button
-                                        key={view}
-                                        onClick={() => setSidebarView(view)}
-                                        className={`flex-1 px-1 py-2.5 text-xs font-medium transition-colors flex items-center justify-center gap-1 ${
-                                            sidebarView === view ? 'bg-white text-gray-900 border-b-2 border-black' : 'text-gray-500 hover:text-gray-900 bg-gray-50'
-                                        }`}
-                                    >
-                                        {view === 'files' && <FolderTree className="w-3.5 h-3.5" />}
-                                        {view === 'ai' && <Bot className="w-3.5 h-3.5" />}
-                                        {view === 'versions' && <History className="w-3.5 h-3.5" />}
-                                        {view === 'files' ? 'Files' : view === 'ai' ? 'Mocky' : 'Versions'}
-                                    </button>
-                                ))}
-                            </div>
-                            <div className="flex-1 overflow-hidden">
-                                {sidebarView === 'files' ? (
-                                    <div className="h-full overflow-y-auto px-3 py-3">
-                                        {fileTree.length > 0 ? (
-                                            <FileTree data={fileTree} onFileClick={handleFileSelect} selectedFile={selectedFile || ''} />
-                                        ) : (
-                                            <div className="text-center py-8">
-                                                <p className="text-sm text-gray-500">No files generated yet</p>
-                                                <p className="text-xs text-gray-400 mt-1">Use Mocky to generate code</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                ) : sidebarView === 'ai' ? (
-                                    <AiAgent
-                                        projectId={currentProjectId as string}
-                                        files={files}
-                                        selectedFile={selectedFile || ''}
-                                        selectedFileContent={selectedFileContent}
-                                        onFileApplied={handleAIAppliedFile}
-                                    />
-                                ) : (
-                                    <div className="h-full flex flex-col">
-                                        <div className="p-3 border-b border-gray-200">
-                                            <Button
-                                                onClick={handleCreateSnapshot}
-                                                disabled={!currentProjectId || isSnapshotCreating}
-                                                size="sm"
-                                                className="w-full h-8 text-xs"
-                                            >
-                                                {isSnapshotCreating ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <History className="w-3 h-3 mr-1" />}
-                                                Create Snapshot
-                                            </Button>
-                                        </div>
-                                        <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                                            {snapshotsLoading ? (
-                                                <div className="text-xs text-gray-500">Loading snapshots...</div>
-                                            ) : snapshots.length === 0 ? (
-                                                <div className="h-full flex items-center justify-center">
-                                                    <div className="text-center py-8">
-                                                        <History className="w-8 h-8 text-gray-300 mx-auto mb-3" />
-                                                        <p className="text-sm text-gray-500">No snapshots yet</p>
-                                                        <p className="text-xs text-gray-400 mt-1">Create one before major edits</p>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                snapshots.map((snapshot) => {
-                                                    const isBusy = snapshotActionId === snapshot._id;
-                                                    return (
-                                                        <div key={snapshot._id} className="border border-gray-200 rounded-lg p-2.5 bg-white">
-                                                            <div className="flex items-start justify-between gap-2">
-                                                                <div>
-                                                                    <p className="text-xs font-medium text-gray-900">
-                                                                        v{snapshot.version} · {snapshot.label}
-                                                                    </p>
-                                                                    <p className="text-[11px] text-gray-500 mt-0.5">
-                                                                        {snapshot.fileCount} files · {(snapshot.totalSize / 1024).toFixed(1)} KB
-                                                                    </p>
-                                                                </div>
-                                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 uppercase">
-                                                                    {snapshot.trigger}
-                                                                </span>
-                                                            </div>
-                                                            <p className="text-[11px] text-gray-400 mt-1.5">{new Date(snapshot.createdAt).toLocaleString()}</p>
-                                                            <div className="mt-2 flex items-center gap-1.5">
-                                                                <Button
-                                                                    onClick={() => handleRollbackSnapshot(snapshot._id)}
-                                                                    disabled={isBusy}
-                                                                    variant="outline"
-                                                                    size="sm"
-                                                                    className="h-6 text-[11px]"
-                                                                >
-                                                                    {isBusy ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <RotateCcw className="w-3 h-3 mr-1" />}
-                                                                    Restore
-                                                                </Button>
-                                                                <Button
-                                                                    onClick={() => handleDeleteSnapshot(snapshot._id)}
-                                                                    disabled={isBusy}
-                                                                    variant="ghost"
-                                                                    size="sm"
-                                                                    className="h-6 text-[11px] text-red-600 hover:text-red-700 hover:bg-red-50"
-                                                                >
-                                                                    <Trash2 className="w-3 h-3 mr-1" />
-                                                                    Delete
-                                                                </Button>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
+                        <WorkspaceSidebar
+                            sidebarView={sidebarView}
+                            onSidebarViewChange={setSidebarView}
+                            fileTree={fileTree}
+                            selectedFile={selectedFile}
+                            onFileSelect={handleFileSelect}
+                            updatingFiles={updatingFiles}
+                            currentProjectId={currentProjectId}
+                            files={files}
+                            selectedFileContent={selectedFileContent}
+                            onFileApplied={handleAIAppliedFile}
+                            snapshots={snapshots}
+                            snapshotsLoading={snapshotsLoading}
+                            isSnapshotCreating={isSnapshotCreating}
+                            snapshotActionId={snapshotActionId}
+                            onCreateSnapshot={handleCreateSnapshot}
+                            onRollbackSnapshot={handleRollbackSnapshot}
+                            onDeleteSnapshot={handleDeleteSnapshot}
+                        />
                     </ResizablePanel>
-                    <ResizableHandle className="w-1 bg-gray-200 hover:bg-blue-400 transition-colors cursor-col-resize" />
+                    <ResizableHandle className="w-1 bg-zinc-200 hover:bg-blue-400 transition-colors cursor-col-resize" />
                     <ResizablePanel defaultSize={75} minSize={40}>
-                        <ResizablePanelGroup key={isTerminalOpen ? 'terminal-open' : 'terminal-closed'} direction="vertical" className="h-full">
-                            <ResizablePanel defaultSize={isTerminalOpen ? 70 : 100} minSize={isTerminalOpen ? 50 : 30}>
-                                <div className="h-full flex flex-col overflow-hidden bg-gray-50">
-                                    {activeView === 'code' ? (
-                                        <>
-                                            <div className="border-b border-gray-200 px-4 py-2.5 bg-white flex items-center justify-between">
-                                                <div className="inline-flex items-center gap-2 text-sm text-gray-600">
-                                                    <Code2 className="w-4 h-4" />
-                                                    <span>{selectedFile || 'No file selected'}</span>
-                                                </div>
-                                                <Button
-                                                    onClick={handleSaveFile}
-                                                    disabled={!selectedFile || !selectedFileContent}
-                                                    size="sm"
-                                                    className="h-7 text-xs"
-                                                    variant="outline"
-                                                >
-                                                    <Save className="w-3 h-3 mr-1" />
-                                                    Save
-                                                </Button>
-                                                <Button
-                                                    onClick={handleRunBackend}
-                                                    disabled={!currentProjectId || isRunning}
-                                                    size="sm"
-                                                    className="h-7 text-xs bg-green-600 hover:bg-green-700"
-                                                >
-                                                    {isRunning ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Play className="w-3 h-3 mr-1" />}
-                                                    {isRunning ? 'Starting...' : 'Run Backend'}
-                                                </Button>
-                                            </div>
-                                            <div className="flex-1 overflow-hidden bg-white">
-                                                {loadingContent ? (
-                                                    <div className="flex items-center justify-center h-full">
-                                                        <div className="text-center">
-                                                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-2"></div>
-                                                            <p className="text-sm text-gray-600">Loading file content...</p>
-                                                        </div>
-                                                    </div>
-                                                ) : selectedFileContent ? (
-                                                    <MonacoEditor
-                                                        value={selectedFileContent}
-                                                        fileName={selectedFile || 'file'}
-                                                        onChange={handleContentChange}
-                                                        readOnly={false}
-                                                        height="100%"
-                                                    />
-                                                ) : (
-                                                    <div className="flex items-center justify-center h-full">
-                                                        <div className="text-center">
-                                                            <Code2 className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                                                            <p className="text-sm text-gray-500">Select a file to view its content</p>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </>
-                                    ) : activeView === 'architecture' ? (
-                                        <ArchitectureGraph
-                                            architecture={architecture}
-                                            loading={architectureLoading}
-                                            error={architectureError}
-                                            onRefresh={
-                                                currentProjectId
-                                                    ? () => {
-                                                          loadArchitecture(currentProjectId);
-                                                      }
-                                                    : undefined
-                                            }
-                                        />
-                                    ) : isBackendReady ? (
-                                        <TestPanel projectId={currentProjectId as string} />
-                                    ) : (
-                                        <div className="h-full flex items-center justify-center bg-white">
-                                            <div className="text-center max-w-md px-6">
-                                                <TestTube2 className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                                                <p className="text-sm font-medium text-gray-900">API Testing is disabled</p>
-                                                <p className="text-xs text-gray-500 mt-1 mb-4">Start the backend first, then open API Testing.</p>
-                                                <Button
-                                                    onClick={handleRunBackend}
-                                                    disabled={!currentProjectId || isRunning}
-                                                    size="sm"
-                                                    className="h-8 bg-green-600 hover:bg-green-700"
-                                                >
-                                                    {isRunning ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Play className="w-3 h-3 mr-1" />}
-                                                    {isRunning ? 'Starting...' : 'Run Backend'}
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </ResizablePanel>
-                            {isTerminalOpen && (
-                                <>
-                                    <ResizableHandle className="h-1 bg-gray-200 hover:bg-blue-400 transition-colors cursor-row-resize" />
-                                    <ResizablePanel minSize={15} defaultSize={30}>
-                                        <Terminal variant="panel" isOpen={true} onClose={() => setIsTerminalOpen(false)} projectId={currentProjectId as string} />
-                                    </ResizablePanel>
-                                </>
-                            )}
-                        </ResizablePanelGroup>
+                        <EditorPanel
+                            activeView={activeView}
+                            selectedFile={selectedFile}
+                            selectedFileContent={selectedFileContent}
+                            loadingContent={loadingContent}
+                            isTerminalOpen={isTerminalOpen}
+                            isRunning={isRunning}
+                            isBackendReady={isBackendReady}
+                            currentProjectId={currentProjectId}
+                            architecture={architecture}
+                            architectureLoading={architectureLoading}
+                            architectureError={architectureError}
+                            onContentChange={handleContentChange}
+                            onSaveFile={handleSaveFile}
+                            onRunBackend={handleRunBackend}
+                            onTerminalClose={() => setIsTerminalOpen(false)}
+                            onLoadArchitecture={() => currentProjectId && loadArchitecture(currentProjectId)}
+                            onCursorPositionChange={setCursorPosition}
+                            onOpenQuickOpen={() => setQuickOpenOpen(true)}
+                            tabs={tabs}
+                            activeTabId={activeTabId}
+                            onSelectTab={handleTabSelect}
+                            onCloseTab={handleTabClose}
+                        />
                     </ResizablePanel>
                 </ResizablePanelGroup>
             </div>
 
-            <Button onClick={() => setIsTerminalOpen((prev) => !prev)} className="fixed bottom-4 right-4 h-10 bg-black hover:bg-gray-800 text-white shadow-lg z-40">
+            <Button
+                onClick={() => setIsTerminalOpen((prev) => !prev)}
+                className="fixed bottom-4 right-4 h-10 bg-black hover:bg-zinc-800 text-white shadow-lg z-40"
+            >
                 <TerminalIcon className="w-4 h-4 mr-2" />
                 {isTerminalOpen ? 'Hide Terminal' : 'Terminal'}
             </Button>
 
-            <div className="h-6 bg-gray-100 border-t border-gray-200 flex items-center justify-between px-3 text-[11px] text-gray-500">
-                <div className="flex items-center gap-3">
-                    <span className="flex items-center gap-1">
-                        <span
-                            className={`w-2 h-2 rounded-full ${
-                                currentProject?.status === 'ready'
-                                    ? 'bg-green-500'
-                                    : currentProject?.status === 'generating'
-                                      ? 'bg-blue-500 animate-pulse'
-                                      : currentProject?.status === 'error'
-                                        ? 'bg-red-500'
-                                        : 'bg-gray-400'
-                            }`}
-                        />
-                        {currentProject?.status ?? 'no project'}
-                    </span>
-                </div>
-                <div className="flex items-center gap-3">
-                    <span>Model: {defaultAiModel}</span>
-                    <span>{files.length} files</span>
-                </div>
-            </div>
+            <QuickOpen
+                open={quickOpenOpen}
+                onOpenChange={setQuickOpenOpen}
+                files={flatFiles}
+                recentFiles={recentFiles}
+                onSelect={handleFileSelect}
+            />
+
+            <WorkspaceStatusBar
+                currentProject={currentProject}
+                filesCount={files.length}
+                selectedFile={selectedFile}
+                {...(cursorPosition ? { cursorPosition } : {})}
+                {...(statusLanguage ? { language: statusLanguage } : {})}
+            />
         </div>
     );
 }
 
-interface FileNode {
-    name: string;
-    type: 'file' | 'folder';
-    children?: FileNode[];
-    path: string;
-    fileId?: string;
-    key?: string;
-}
-
-function buildFileTree(files: ProjectFile[]): FileNode[] {
-    const tree: FileNode[] = [];
-    const pathMap = new Map<string, FileNode>();
-    const sorted = [...files].sort((a, b) => getDisplayPath(a).localeCompare(getDisplayPath(b)));
-
-    for (const file of sorted) {
-        const displayPath = getDisplayPath(file);
-        const parts = displayPath.split('/');
-        let currentPath = '';
-
-        for (let i = 0; i < parts.length; i++) {
-            const part = parts[i];
-            if (!part) continue;
-            const isLast = i === parts.length - 1;
-            currentPath = currentPath ? `${currentPath}/${part}` : part;
-
-            if (!pathMap.has(currentPath)) {
-                const node: FileNode = isLast
-                    ? { name: part, type: 'file', path: currentPath, fileId: file._id, key: file.key }
-                    : { name: part, type: 'folder', path: currentPath, children: [] };
-
-                pathMap.set(currentPath, node);
-
-                if (i === 0) {
-                    tree.push(node);
-                } else {
-                    const parentPath = parts.slice(0, i).join('/');
-                    pathMap.get(parentPath)?.children?.push(node);
-                }
-            }
-        }
-    }
-
-    sortTreeNodes(tree);
-
-    return tree;
-}
-
-function getDisplayPath(file: ProjectFile): string {
-    const key = file.key || '';
-    const marker = '/';
-    const projectsPrefix = 'projects/';
-
-    if (key.startsWith(projectsPrefix)) {
-        const firstSlashAfterProjectId = key.indexOf(marker, projectsPrefix.length);
-        if (firstSlashAfterProjectId !== -1 && firstSlashAfterProjectId + 1 < key.length) {
-            return key.slice(firstSlashAfterProjectId + 1);
-        }
-    }
-
-    return file.name;
-}
-
-function sortTreeNodes(nodes: FileNode[]) {
-    nodes.sort((a, b) => {
-        if (a.type !== b.type) {
-            return a.type === 'folder' ? -1 : 1;
-        }
-        return a.name.localeCompare(b.name);
-    });
-
-    for (const node of nodes) {
-        if (node.children?.length) {
-            sortTreeNodes(node.children);
-        }
-    }
+function getLanguageFromFileName(fileName: string): string {
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    const map: Record<string, string> = {
+        ts: 'TypeScript', tsx: 'TypeScript', js: 'JavaScript', jsx: 'JavaScript',
+        py: 'Python', json: 'JSON', css: 'CSS', scss: 'SCSS', html: 'HTML',
+        md: 'Markdown', yaml: 'YAML', yml: 'YAML', sh: 'Shell', go: 'Go',
+        rs: 'Rust', java: 'Java', sql: 'SQL'
+    };
+    return map[ext] || ext.toUpperCase() || 'Plain Text';
 }

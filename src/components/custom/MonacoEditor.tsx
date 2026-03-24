@@ -11,6 +11,7 @@ interface MonacoEditorProps {
   fileName?: string
   readOnly?: boolean
   height?: string | number
+  onCursorPositionChange?: (pos: { line: number; col: number }) => void
 }
 
 function getLanguageFromFileName(fileName: string): string {
@@ -64,7 +65,8 @@ export function MonacoEditor({
   language,
   fileName,
   readOnly = false,
-  height = '100%'
+  height = '100%',
+  onCursorPositionChange
 }: MonacoEditorProps) {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
   const detectedLanguage = language || (fileName ? getLanguageFromFileName(fileName) : 'plaintext')
@@ -99,6 +101,12 @@ export function MonacoEditor({
       formatOnPaste: true,
       formatOnType: true,
     })
+
+    if (onCursorPositionChange) {
+      editor.onDidChangeCursorPosition((e) => {
+        onCursorPositionChange({ line: e.position.lineNumber, col: e.position.column })
+      })
+    }
   }
 
   const handleEditorValidationError = (error: unknown) => {

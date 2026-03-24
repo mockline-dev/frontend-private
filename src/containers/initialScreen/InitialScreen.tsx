@@ -23,7 +23,8 @@ export function InitialScreen({ currentUser }: InitialScreenProps) {
         creationState,
         isPreprocessing,
         showMorphLoading,
-        isMorphing
+        isMorphing,
+        resetState
     } = useInitialScreen({ currentUser });
 
     return (
@@ -39,7 +40,7 @@ export function InitialScreen({ currentUser }: InitialScreenProps) {
                 sending={isPreprocessing}
                 isMorphing={isMorphing}
             />
-            <ProjectPreparationOverlay visible={showMorphLoading} state={creationState} />
+            <ProjectPreparationOverlay visible={showMorphLoading} state={creationState} onCancel={resetState} />
         </div>
     );
 }

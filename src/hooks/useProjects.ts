@@ -28,13 +28,14 @@ export interface UseProjectsReturn {
     refresh: () => Promise<void>;
 }
 
-export function useProjects(initialProjects: Project[] = []): UseProjectsReturn {
+export function useProjects(initialProjects: Project[] = [], opts?: { disableRealtimeListeners?: boolean }): UseProjectsReturn {
     const [projects, setProjects] = useState<Project[]>(initialProjects);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [currentProject, setCurrentProject] = useState<Project | null>(null);
 
     const isBrowser = typeof window !== 'undefined';
+    const disableRealtime = opts?.disableRealtimeListeners ?? false;
 
     // Load all projects
     const loadProjects = useCallback(
@@ -197,20 +198,24 @@ export function useProjects(initialProjects: Project[] = []): UseProjectsReturn 
     }, [loadProjects]);
 
     useRealtimeUpdates<Project>('projects', 'created', (project) => {
+        if (disableRealtime) return;
         setProjects((prev) => (prev.some((p) => p._id === project._id) ? prev : [project, ...prev]));
     });
 
     useRealtimeUpdates<Project>('projects', 'patched', (project) => {
+        if (disableRealtime) return;
         setProjects((prev) => prev.map((p) => (p._id === project._id ? project : p)));
         setCurrentProject((prev) => (prev?._id === project._id ? project : prev));
     });
 
     useRealtimeUpdates<Project>('projects', 'removed', (project) => {
+        if (disableRealtime) return;
         setProjects((prev) => prev.filter((p) => p._id !== project._id));
         setCurrentProject((prev) => (prev?._id === project._id ? null : prev));
     });
 
     useRealtimeUpdates<ProgressEventData>('projects', 'progress', (data) => {
+        if (disableRealtime) return;
         setProjects((prev) =>
             prev.map((p) =>
                 p._id === data.projectId

@@ -75,13 +75,20 @@ export function AnimatedAIChat({
         return () => window.removeEventListener('mousemove', handleMouseMove);
     }, []);
 
-    const handleSendMessage = () => {
+    const handleSendMessage = async () => {
         const normalized = value.trim();
         if (!normalized || isTyping || enhanceLoading) return;
 
-        onSendClick(normalized);
+        const savedValue = value;
         setValue('');
         adjustHeight(true);
+
+        try {
+            await onSendClick(normalized);
+        } catch {
+            setValue(savedValue);
+            adjustHeight(false);
+        }
     };
 
     const selectCommandSuggestion = (index: number) => {

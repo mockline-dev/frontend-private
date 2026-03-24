@@ -1,6 +1,7 @@
 'use client';
 
 import { createAIStream } from '@/api/aiStream/createAIStream';
+import { patchAIStream } from '@/api/aiStream/patchAIStream';
 import { fetchFileContent } from '@/api/files/fetchFileContent';
 import { createUpload } from '@/api/uploads/createUpload';
 import { defaultAiModel } from '@/config/environment';
@@ -8,7 +9,7 @@ import { type FileUpdate } from '@/containers/workspace/components/FileUpdatePre
 import { useRealtimeUpdates } from '@/hooks/useRealtimeUpdates';
 import { filesService, type File as FileType } from '@/services/api/files';
 import { messagesService, type Message } from '@/services/api/messages';
-import { type AIAgentStepEvent, type AIStreamContext, type AIWritePreviewEvent } from '@/types/feathers';
+import { type AIAgentStepEvent, type AIFileDiffEvent, type AIFileAppliedEvent, type AIStreamContext, type AIWritePreviewEvent } from '@/types/feathers';
 import { validatePrompt } from '@/utils/promptValidation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -53,6 +54,7 @@ export interface UseAIAgentReturn {
     handleAcceptUpdate: (update: FileUpdate) => Promise<void>;
     handleRejectUpdate: (update: FileUpdate) => void;
     handleAcceptAllUpdates: () => Promise<void>;
+    stopStream: () => void;
 }
 
 interface FileAppliedEvent {
@@ -231,6 +233,20 @@ function toFileUpdateFromWritePreview(preview: AIStreamWritePreviewEvent): FileU
         description: preview.description || 'Proposed change',
         content: preview.newContent || '',
         language: inferLanguageFromFilename(filename)
+    };
+}
+
+function toFileUpdateFromFileDiff(event: AIFileDiffEvent): FileUpdate {
+    const filename = normalizePath(event.filename);
+
+    return {
+        filename,
+        action: event.action,
+        description: event.description ?? 'Proposed change',
+        content: event.newContent,
+        language: inferLanguageFromFilename(filename),
+        updateId: event.updateId,
+        ...(event.oldContent !== undefined ? { oldContent: event.oldContent } : {})
     };
 }
 
@@ -510,10 +526,34 @@ export function useAIAgent(
         [projectId]
     );
 
+    /** Handles the new file-diff event — replaces write-preview in the updated backend. */
+    const handleFileDiff = useCallback(
+        (event: AIFileDiffEvent) => {
+            if (toId(event.projectId) !== toId(projectId)) return;
+            hasStructuredPreviewsRef.current = true;
+            setFileUpdates((prev) => mergeFileUpdates(prev, [toFileUpdateFromFileDiff(event)]));
+        },
+        [projectId]
+    );
+
+    /** Handles the file-applied event — backend has written the file; clean up pending state. */
+    const handleFileApplied = useCallback(
+        (event: AIFileAppliedEvent) => {
+            if (toId(event.projectId) !== toId(projectId)) return;
+            const normalizedFilename = normalizePath(event.filename);
+            setFileUpdates((prev) => prev.filter((u) => u.updateId !== event.updateId && normalizePath(u.filename) !== normalizedFilename));
+            setApplyingUpdateKeys((prev) => prev.filter((k) => !k.endsWith(`:${normalizedFilename}`)));
+            onFileApplied?.({ action: event.action, filename: normalizedFilename });
+        },
+        [projectId, onFileApplied]
+    );
+
     useRealtimeUpdates<AIStreamChunkEvent>('aiStream', 'chunk', handleStreamChunk, (chunk) => toId(chunk.projectId) === toId(projectId));
     useRealtimeUpdates<AIStreamFileUpdatesEvent>('aiStream', 'file-updates', handleStreamFileUpdates, (payload) => toId(payload.projectId) === toId(projectId));
     useRealtimeUpdates<AIAgentStepEvent>('aiStream', 'agent-step', handleAgentStep, (payload) => toId(payload.projectId) === toId(projectId));
     useRealtimeUpdates<AIStreamWritePreviewEvent>('aiStream', 'write-preview', handleWritePreview, (payload) => toId(payload.projectId) === toId(projectId));
+    useRealtimeUpdates<AIFileDiffEvent>('aiStream', 'file-diff', handleFileDiff, (payload) => toId(payload.projectId) === toId(projectId));
+    useRealtimeUpdates<AIFileAppliedEvent>('aiStream', 'file-applied', handleFileApplied, (payload) => toId(payload.projectId) === toId(projectId));
 
     const streamAIResponse = useCallback(
         async (conversationMessages: StreamMessage[], currentProjectId: string, latestKnownCreatedAt: number) => {
@@ -683,17 +723,25 @@ export function useAIAgent(
             setApplyingUpdateKeys((prev) => (prev.includes(updateKey) ? prev : [...prev, updateKey]));
 
             try {
-                if (update.action === 'delete') {
+                if (update.updateId) {
+                    // New backend flow: delegate file write to server
+                    await patchAIStream({ projectId, action: 'accept', updateId: update.updateId });
+                    // Optimistically clean up local state; file-applied event will also fire as confirmation
+                    setFileUpdates((prev) => prev.filter((u) => u.filename !== update.filename));
+                    onFileApplied?.({ action: update.action, filename: normalizePath(update.filename), content: update.content });
+                    const label = update.action === 'delete' ? 'Deleted' : update.action === 'modify' ? 'Updated' : 'Created';
+                    toast.success(`${label}: ${update.filename}`);
+                } else if (update.action === 'delete') {
+                    // Legacy flow: client-side delete
                     const file = findMatchingFile(files, update.filename);
                     if (file) {
                         await filesService.remove(file._id);
-                        onFileApplied?.({
-                            action: 'delete',
-                            filename: normalizePath(update.filename)
-                        });
+                        onFileApplied?.({ action: 'delete', filename: normalizePath(update.filename) });
                         toast.success(`Deleted: ${update.filename}`);
                     }
+                    setFileUpdates((prev) => prev.filter((u) => u.filename !== update.filename));
                 } else {
+                    // Legacy flow: client-side upload for create/modify
                     const existing = findMatchingFile(files, update.filename);
                     const resolvedContent = existing && update.action === 'modify' ? await resolveUpdatedContentForModify(update, existing) : update.content;
                     const contentBytes = new TextEncoder().encode(resolvedContent);
@@ -708,11 +756,7 @@ export function useAIAgent(
 
                     if (existing) {
                         await filesService.patch(existing._id, { size: contentBytes.length, currentVersion: (existing.currentVersion || 1) + 1 });
-                        onFileApplied?.({
-                            action: 'modify',
-                            filename: normalizePath(existing.name || update.filename),
-                            content: resolvedContent
-                        });
+                        onFileApplied?.({ action: 'modify', filename: normalizePath(existing.name || update.filename), content: resolvedContent });
                         toast.success(`Updated: ${update.filename}`);
                     } else {
                         await filesService.create({
@@ -722,16 +766,12 @@ export function useAIAgent(
                             fileType: normalizedFilename.split('.').pop() || 'text',
                             size: contentBytes.length
                         });
-                        onFileApplied?.({
-                            action: 'create',
-                            filename: normalizedFilename,
-                            content: resolvedContent
-                        });
+                        onFileApplied?.({ action: 'create', filename: normalizedFilename, content: resolvedContent });
                         toast.success(`Created: ${update.filename}`);
                     }
-                }
 
-                setFileUpdates((prev) => prev.filter((u) => u.filename !== update.filename));
+                    setFileUpdates((prev) => prev.filter((u) => u.filename !== update.filename));
+                }
             } catch (error) {
                 const message = error instanceof Error ? error.message : 'Failed to apply file update';
                 if (message.includes('SEARCH/REPLACE')) {
@@ -748,15 +788,55 @@ export function useAIAgent(
         [projectId, files, onFileApplied]
     );
 
-    const handleRejectUpdate = useCallback((update: FileUpdate) => {
-        setFileUpdates((prev) => prev.filter((u) => u.filename !== update.filename));
-    }, []);
+    const handleRejectUpdate = useCallback(
+        (update: FileUpdate) => {
+            setFileUpdates((prev) => prev.filter((u) => u.filename !== update.filename));
+            if (update.updateId && projectId) {
+                patchAIStream({ projectId, action: 'reject', updateId: update.updateId }).catch(() => {
+                    // Fire-and-forget: UI is already updated, rejection notification to backend is best-effort
+                });
+            }
+        },
+        [projectId]
+    );
 
     const handleAcceptAllUpdates = useCallback(async () => {
-        const results = await Promise.allSettled(fileUpdates.map((u) => handleAcceptUpdate(u)));
-        const failed = results.filter((r) => r.status === 'rejected').length;
+        if (!projectId) return;
+
+        const serverUpdates = fileUpdates.filter((u) => u.updateId);
+        const clientUpdates = fileUpdates.filter((u) => !u.updateId);
+        let failed = 0;
+
+        if (serverUpdates.length > 0) {
+            const serverKeys = serverUpdates.map(getUpdateKey);
+            setApplyingUpdateKeys((prev) => [...new Set([...prev, ...serverKeys])]);
+            try {
+                await patchAIStream({ projectId, action: 'accept-all' });
+                // Optimistically remove server-managed updates; file-applied events will also fire
+                setFileUpdates((prev) => prev.filter((u) => !u.updateId));
+                serverUpdates.forEach((u) => {
+                    onFileApplied?.({ action: u.action, filename: normalizePath(u.filename), content: u.content });
+                });
+            } catch {
+                failed++;
+                toast.error('Failed to apply server-side changes');
+            } finally {
+                setApplyingUpdateKeys((prev) => prev.filter((k) => !serverKeys.includes(k)));
+            }
+        }
+
+        if (clientUpdates.length > 0) {
+            const results = await Promise.allSettled(clientUpdates.map((u) => handleAcceptUpdate(u)));
+            failed += results.filter((r) => r.status === 'rejected').length;
+        }
+
         if (failed > 0) toast.error(`${failed} update(s) failed`);
-    }, [fileUpdates, handleAcceptUpdate]);
+    }, [fileUpdates, handleAcceptUpdate, projectId, onFileApplied]);
+
+    const stopStream = useCallback(() => {
+        setIsStreaming(false);
+        setMessages((prev) => prev.filter((m) => m._id !== STREAMING_MESSAGE_ID));
+    }, []);
 
     return {
         messages,
@@ -776,6 +856,7 @@ export function useAIAgent(
         loadOlderMessages,
         handleAcceptUpdate,
         handleRejectUpdate,
-        handleAcceptAllUpdates
+        handleAcceptAllUpdates,
+        stopStream
     };
 }

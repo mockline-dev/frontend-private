@@ -15,7 +15,7 @@ interface UseInitialScreenOptions {
     currentUser: UserData | undefined;
 }
 
-type PreparationPhase = 'idle' | 'enhancing' | 'inferring-meta';
+type PreparationPhase = 'idle' | 'inferring-meta';
 
 const SAVED_PROMPT_KEY = 'savedPrompt';
 
@@ -29,7 +29,8 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
     const {
         state: creationState,
         createProject,
-        isCreating
+        isCreating,
+        resetState
     } = useProjectCreation({
         onSuccess: (project) => {
             options?.onProjectCreated?.(project._id);
@@ -85,6 +86,7 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
             } catch (error) {
                 const message = error instanceof Error ? error.message : 'Failed to create project';
                 toast.error(message);
+                throw error;
             } finally {
                 setPreparationPhase('idle');
             }
@@ -119,6 +121,7 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
         creationState,
         isCreating,
         preparationPhase,
+        resetState,
         isPreprocessing: preparationPhase !== 'idle',
         showMorphLoading: isCreating && preparationPhase === 'idle',
         isMorphing: isCreating && preparationPhase === 'idle'

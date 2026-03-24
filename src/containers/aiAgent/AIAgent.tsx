@@ -1,13 +1,15 @@
 'use client';
 
 import { fetchFileContent } from '@/api/files/fetchFileContent';
+import { ChatComposer } from '@/components/custom/ChatComposer';
+import { MarkdownMessage } from '@/components/custom/MarkdownMessage';
 import { Button } from '@/components/ui/button';
 import { FileUpdatePreview } from '@/containers/workspace/components/FileUpdatePreview';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAIAgent } from '@/hooks/useAIAgent';
 import { type File as FileType } from '@/services/api/files';
 import { type AIAgentStepEvent } from '@/types/feathers';
-import { Activity, Brain, CheckCircle2, Copy, Loader2, RefreshCcw, Send, Sparkles, Wrench } from 'lucide-react';
+import { Activity, Brain, CheckCircle2, Copy, Loader2, RefreshCcw, Sparkles, Wrench } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -73,7 +75,8 @@ export function AiAgent({ projectId, files = [], selectedFile, selectedFileConte
         loadOlderMessages,
         handleAcceptUpdate,
         handleRejectUpdate,
-        handleAcceptAllUpdates
+        handleAcceptAllUpdates,
+        stopStream
     } = useAIAgent(projectId, files, selectedFile, selectedFileContent, onFileApplied);
 
     const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -183,13 +186,6 @@ export function AiAgent({ projectId, files = [], selectedFile, selectedFileConte
         }
     };
 
-    const handleComposerKeyDown = async (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (event.key === 'Enter' && !event.shiftKey) {
-            event.preventDefault();
-            await handleSubmit(event as unknown as React.FormEvent);
-        }
-    };
-
     return (
         <div className="h-full flex flex-col bg-white">
             <div
@@ -236,7 +232,11 @@ export function AiAgent({ projectId, files = [], selectedFile, selectedFileConte
                                 </span>
                                 <span className={`text-[10px] ${message.role === 'user' ? 'text-gray-300' : 'text-gray-500'}`}>{formatTime(message.createdAt)}</span>
                             </div>
-                            <p className={`${isMobile ? 'text-[13px]' : 'text-sm'} leading-relaxed whitespace-pre-wrap`}>{message.content}</p>
+                            {message.role === 'assistant' ? (
+                                <MarkdownMessage content={message.content} />
+                            ) : (
+                                <p className={`${isMobile ? 'text-[13px]' : 'text-sm'} leading-relaxed whitespace-pre-wrap`}>{message.content}</p>
+                            )}
 
                             <div className="mt-2 flex items-center justify-end gap-1.5">
                                 <Button
@@ -367,31 +367,15 @@ export function AiAgent({ projectId, files = [], selectedFile, selectedFileConte
                 </div>
             )}
 
-            <form onSubmit={handleSubmit} className="border-t border-gray-200 p-3 bg-white">
-                <div className="flex items-end gap-2">
-                    <textarea
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={handleComposerKeyDown}
-                        placeholder="Ask Mocky..."
-                        rows={1}
-                        className={`flex-1 bg-white border border-gray-300 rounded-xl px-3 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent resize-none ${
-                            isMobile ? 'text-[13px] min-h-12' : 'text-sm min-h-13'
-                        }`}
-                        disabled={isLoading || isStreaming}
-                        aria-label="Message Mocky"
-                    />
-                    <Button
-                        type="submit"
-                        disabled={!input.trim() || isLoading || isStreaming}
-                        size="icon"
-                        className="bg-black hover:bg-gray-800 text-white h-11 w-11 rounded-xl"
-                        aria-label={isLoading || isStreaming ? 'Sending message' : 'Send message'}
-                    >
-                        {isLoading || isStreaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                    </Button>
-                </div>
-            </form>
+            <ChatComposer
+                value={input}
+                onChange={setInput}
+                onSubmit={handleSubmit}
+                isLoading={isLoading}
+                isStreaming={isStreaming}
+                onStopGenerating={stopStream}
+                placeholder="Ask Mocky..."
+            />
         </div>
     );
 }

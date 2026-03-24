@@ -249,6 +249,40 @@ export interface AIWritePreviewEvent {
     description?: string;
 }
 
+/** Emitted by the new backend instead of write-preview. Includes server-resolved preview content. */
+export interface AIFileDiffEvent {
+    projectId: string;
+    updateId: string;
+    filename: string;
+    action: 'create' | 'modify' | 'delete';
+    /** Original file content (for diff view) */
+    oldContent?: string;
+    /** Resolved new content (S/R already applied for modify actions) */
+    newContent: string;
+    description?: string;
+}
+
+/** Emitted when the backend has written a file update to storage. */
+export interface AIFileAppliedEvent {
+    projectId: string;
+    updateId: string;
+    filename: string;
+    action: 'create' | 'modify' | 'delete';
+}
+
+/** Emitted when a pending file update has been rejected server-side. */
+export interface AIFileRejectedEvent {
+    projectId: string;
+    updateId: string;
+    filename: string;
+}
+
+export interface AIStreamPatchRequest {
+    projectId: string;
+    action: 'apply' | 'accept' | 'reject' | 'accept-all';
+    updateId?: string;
+}
+
 export interface AIContextFileTreeEntry {
     path: string;
     size?: number;

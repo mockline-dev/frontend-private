@@ -1,7 +1,7 @@
 'use client';
 
 import { CreateProjectData, GenerationProgress, Project } from '@/types/feathers';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useProjects } from './useProjects';
 import { useProjectChannel, useRealtimeUpdates } from './useRealtimeUpdates';
 
@@ -61,7 +61,12 @@ export interface UseProjectCreationReturn {
  * @returns An object containing state, actions, and computed values
  */
 export function useProjectCreation(options?: { onSuccess?: (project: Project) => void; onError?: (error: string) => void }): UseProjectCreationReturn {
-    const { createProject: createProjectService, error: projectError } = useProjects();
+    const { createProject: createProjectService, error: projectError } = useProjects([], { disableRealtimeListeners: true });
+
+    const optionsRef = useRef(options);
+    useEffect(() => {
+        optionsRef.current = options;
+    });
 
     const [status, setStatus] = useState<ProjectCreationStatus>('idle');
     const [progress, setProgress] = useState<GenerationProgress | null>(null);
@@ -77,7 +82,7 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
                 const error = 'Cannot create project on the server';
                 setLocalError(error);
                 setStatus('error');
-                options?.onError?.(error);
+                optionsRef.current?.onError?.(error);
                 return;
             }
 
@@ -96,7 +101,7 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
 
                 if (newProject.status === 'ready') {
                     setStatus('ready');
-                    options?.onSuccess?.(newProject);
+                    optionsRef.current?.onSuccess?.(newProject);
                     return;
                 }
 
@@ -104,7 +109,7 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
                     const message = newProject.errorMessage || 'Project generation failed';
                     setLocalError(message);
                     setStatus('error');
-                    options?.onError?.(message);
+                    optionsRef.current?.onError?.(message);
                     return;
                 }
 
@@ -113,10 +118,10 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
                 const errorMessage = error instanceof Error ? error.message : 'Failed to create project';
                 setLocalError(errorMessage);
                 setStatus('error');
-                options?.onError?.(errorMessage);
+                optionsRef.current?.onError?.(errorMessage);
             }
         },
-        [status, createProjectService, options]
+        [status, createProjectService]
     );
 
     /**
@@ -144,11 +149,11 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
 
                 if (updatedProject.status === 'ready') {
                     setStatus('ready');
-                    options?.onSuccess?.(updatedProject);
+                    optionsRef.current?.onSuccess?.(updatedProject);
                 } else if (updatedProject.status === 'error') {
                     setStatus('error');
                     setLocalError(updatedProject.errorMessage || 'Project generation failed');
-                    options?.onError?.(updatedProject.errorMessage || 'Project generation failed');
+                    optionsRef.current?.onError?.(updatedProject.errorMessage || 'Project generation failed');
                 }
             }
         },
@@ -169,12 +174,15 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
                 const message = event.progress.errorMessage || 'Project generation failed';
                 setLocalError(message);
                 setStatus('error');
-                options?.onError?.(message);
+                optionsRef.current?.onError?.(message);
                 return;
             }
 
             if (event.status === 'ready') {
                 setStatus('ready');
+                if (project) {
+                    optionsRef.current?.onSuccess?.(project);
+                }
                 return;
             }
 

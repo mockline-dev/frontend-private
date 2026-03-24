@@ -15,8 +15,13 @@ export interface FileUpdate {
     filename: string;
     action: 'create' | 'modify' | 'delete';
     description: string;
+    /** For create/modify: the new (resolved) content. For delete: may be empty. */
     content: string;
+    /** Original content for diff view — provided by the backend on file-diff events. */
+    oldContent?: string;
     language: string;
+    /** Backend update ID used for server-side accept/reject patch calls. */
+    updateId?: string;
 }
 
 export interface FileUpdatePreviewProps {
@@ -105,8 +110,8 @@ export function FileUpdatePreview({ updates, currentFiles, applyingUpdateKeys = 
                 {updates.map((update) => {
                     const isExpanded = expandedUpdates.has(update.filename);
                     const isApplyingUpdate = applyingUpdateKeys.includes(getUpdateKey(update));
-                    const currentContent = currentFiles.get(update.filename) || '';
-                    const missingCurrentContent = update.action === 'modify' && !currentFiles.has(update.filename);
+                    const currentContent = update.oldContent ?? (currentFiles.get(update.filename) || '');
+                    const missingCurrentContent = update.action === 'modify' && !update.oldContent && !currentFiles.has(update.filename);
 
                     return (
                         <div key={`${update.action}:${update.filename}`} className="border-b border-gray-200 bg-white" role="listitem">

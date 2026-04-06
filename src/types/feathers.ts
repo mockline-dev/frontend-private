@@ -15,7 +15,16 @@ export interface GenerationProgress {
     totalFiles: number;
     startedAt?: number;
     completedAt?: number;
+    failedAt?: number;
     errorMessage?: string;
+    warnings?: string[];
+    errorType?: string;
+    retryAttempts?: number;
+    validationResults?: {
+        passCount: number;
+        failCount: number;
+        failedFiles: string[];
+    };
 }
 
 export interface Project {
@@ -26,9 +35,12 @@ export interface Project {
     framework: 'fast-api' | 'feathers';
     language: 'python' | 'typescript';
     model: string;
-    status: 'initializing' | 'generating' | 'validating' | 'ready' | 'error';
+    status: 'initializing' | 'generating' | 'validating' | 'ready' | 'running' | 'error';
     errorMessage?: string;
+    errorType?: string;
+    retryAttempts?: number;
     jobId?: string;
+    architectureId?: string;
     generationProgress?: GenerationProgress;
     createdAt: number;
     updatedAt: number;
@@ -133,8 +145,26 @@ export interface Message {
     role: 'user' | 'system' | 'assistant';
     type: 'text' | 'file';
     content: string;
+    intent?: string;
+    model?: string;
     tokens?: number;
     status?: string;
+    metadata?: {
+        usage?: {
+            promptTokens: number;
+            completionTokens: number;
+            totalTokens: number;
+        };
+        sandboxResult?: {
+            success: boolean;
+            syntaxValid?: boolean;
+            compilationOutput?: string;
+            testOutput?: string;
+            durationMs: number;
+        };
+        filesGenerated?: string[];
+        enhancedPrompt?: string;
+    };
     createdAt: number;
     updatedAt: number;
 }
@@ -331,4 +361,114 @@ export interface GenerationProgressEventData {
     stage: string;
     percentage: number;
     currentFile?: string;
+}
+
+// ============================================================================
+// Session Types
+// ============================================================================
+
+export interface Session {
+    _id: string;
+    projectId: string;
+    userId: string;
+    status: 'starting' | 'running' | 'stopped' | 'error';
+    containerId?: string;
+    proxyUrl?: string;
+    port?: number;
+    language: string;
+    startedAt?: number;
+    stoppedAt?: number;
+    errorMessage?: string;
+    createdAt: number;
+    updatedAt: number;
+}
+
+export interface CreateSessionData {
+    projectId: string;
+    userId: string;
+    language: string;
+}
+
+export interface SessionQuery extends QueryParams {
+    projectId?: string;
+    status?: Session['status'];
+}
+
+// ============================================================================
+// Orchestration & Pipeline Event Types
+// ============================================================================
+
+export interface OrchestrationStartedEvent {
+    projectId: string;
+    userId: string;
+}
+
+export interface OrchestrationIntentEvent {
+    intent: string;
+    confidence: number;
+    entities?: Record<string, unknown>;
+}
+
+export interface OrchestrationEnhancedEvent {
+    originalLength: number;
+    enhancedLength: number;
+}
+
+export interface OrchestrationContextEvent {
+    chunksFound: number;
+    tokensUsed: number;
+}
+
+export interface OrchestrationTokenEvent {
+    token: string;
+}
+
+export interface OrchestrationCompletedEvent {
+    intent: string;
+    contentLength: number;
+    usage: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+    };
+}
+
+export interface OrchestrationErrorEvent {
+    error: string;
+}
+
+export interface SandboxResultEvent {
+    success: boolean;
+    syntaxValid?: boolean;
+    compilationOutput?: string;
+    testOutput?: string;
+    durationMs: number;
+}
+
+export interface SandboxRetryEvent {
+    attempt: number;
+    error: string;
+}
+
+export interface FilesPersistedEvent {
+    fileIds: string[];
+    snapshotId: string;
+    uploadedCount: number;
+    filePaths: string[];
+}
+
+export interface IndexingCompletedEvent {
+    projectId: string;
+    indexed: number;
+    removed: number;
+    changes: {
+        added: number;
+        modified: number;
+        deleted: number;
+    };
+}
+
+export interface IndexingErrorEvent {
+    projectId: string;
+    error: string;
 }

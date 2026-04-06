@@ -1,0 +1,76 @@
+/**
+ * Scalar API Client — Zinc theme
+ * Overrides Scalar's CSS variables to match shadcn/ui zinc design system.
+ * Scoped under .scalar-app to prevent bleed into the host application.
+ * Coordinates with shadcn/ui dark mode via the `dark` class on <html>.
+ */
+
+@import '@scalar/themes/style.css';
+
+/* ─── Light mode ─────────────────────────────────────────────────────────── */
+
+:root .scalar-app {
+    --scalar-font: ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --scalar-font-code: ui-monospace, 'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace;
+
+    /* Backgrounds — zinc scale */
+    --scalar-background-1: #ffffff;
+    --scalar-background-2: #f4f4f5;
+    --scalar-background-3: #e4e4e7;
+    --scalar-background-accent: rgba(24, 24, 27, 0.06);
+
+    /* Text */
+    --scalar-color-1: #18181b;
+    --scalar-color-2: #3f3f46;
+    --scalar-color-3: #71717a;
+    --scalar-color-accent: #18181b;
+
+    /* Borders */
+    --scalar-border-color: #e4e4e7;
+
+    /* Method colors — keep readable against light bg */
+    --scalar-color-green: #16a34a;
+    --scalar-color-orange: #ea580c;
+    --scalar-color-blue: #2563eb;
+    --scalar-color-red: #dc2626;
+    --scalar-color-purple: #7c3aed;
+    --scalar-color-yellow: #ca8a04;
+}
+
+/* ─── Dark mode ──────────────────────────────────────────────────────────── */
+
+:root.dark .scalar-app,
+.dark .scalar-app {
+    /* Backgrounds — zinc dark scale matching shadcn/ui */
+    --scalar-background-1: #09090b;
+    --scalar-background-2: #18181b;
+    --scalar-background-3: #27272a;
+    --scalar-background-accent: rgba(244, 244, 245, 0.05);
+
+    /* Text */
+    --scalar-color-1: #fafafa;
+    --scalar-color-2: #a1a1aa;
+    --scalar-color-3: #71717a;
+    --scalar-color-accent: #e4e4e7;
+
+    /* Borders */
+    --scalar-border-color: #27272a;
+
+    /* Method colors — brightened for dark bg */
+    --scalar-color-green: #4ade80;
+    --scalar-color-orange: #fb923c;
+    --scalar-color-blue: #60a5fa;
+    --scalar-color-red: #f87171;
+    --scalar-color-purple: #a78bfa;
+    --scalar-color-yellow: #fbbf24;
+}
+
+/* ─── Embedding overrides ────────────────────────────────────────────────── */
+
+/* Remove top-level padding when embedded in a panel */
+.scalar-api-client-embedded .scalar-app {
+    padding: 0;
+    border-radius: 0;
+    box-shadow: none;
+    height: 100%;
+}

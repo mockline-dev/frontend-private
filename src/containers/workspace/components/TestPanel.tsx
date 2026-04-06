@@ -35,9 +35,12 @@ const methodColors = {
 
 interface TestPanelProps {
     projectId?: string;
+    sessionId?: string;
+    sessionProxyUrl?: string;
+    isSessionRunning?: boolean;
 }
 
-export function TestPanel({ projectId }: TestPanelProps) {
+export function TestPanel({ projectId, sessionId, sessionProxyUrl, isSessionRunning }: TestPanelProps) {
     // Initialize with common API endpoints for backend testing
     const [requests, setRequests] = useState<TestRequest[]>([
         {

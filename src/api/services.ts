@@ -7,6 +7,7 @@ export const apiServices = {
     uploads: 'uploads' as const,
     media: 'media' as const,
     messages: 'messages' as const,
+    sessions: 'sessions' as const,
 
     // AI services
     aiModels: 'ai-models' as const,
@@ -23,3 +24,4 @@ export const apiServices = {
     // Architecture service
     architecture: 'architecture' as const
 } as const;
+

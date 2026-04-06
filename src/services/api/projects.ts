@@ -4,49 +4,16 @@ import { fetchProjectById } from '@/api/projects/fetchProjectById';
 import { fetchProjects } from '@/api/projects/fetchProjects';
 import { updateProject } from '@/api/projects/updateProject';
 import feathersClient from '@/services/featherClient';
+import { CreateProjectData, Project, ProjectQuery } from '@/types/feathers';
 
-export interface Project {
-    _id: string;
-    userId: string;
-    name: string;
-    description: string;
-    framework: string;
-    language: string;
-    model: string;
-    status: 'initializing' | 'generating' | 'ready' | 'error';
-    errorMessage?: string;
-    createdAt: number;
-    updatedAt: number;
-    // Progress tracking fields
-    filesGenerated?: number;
-    totalFiles?: number;
-    generationProgress?: number;
-    currentStage?: string;
-}
-
-export interface CreateProjectData {
-    name: string;
-    description: string;
-    framework: string;
-    language: string;
-    model: string;
-    [key: string]: unknown;
-}
-
-export interface ProjectQuery {
-    $sort?: {
-        createdAt?: number;
-    };
-    $limit?: number;
-    $skip?: number;
-}
+export type { Project, CreateProjectData, ProjectQuery };
 
 export const projectsService = {
     async create(data: CreateProjectData): Promise<Project> {
         return await createProject(data);
     },
 
-    async find(query?: ProjectQuery): Promise<{ data: Project[]; total?: number; limit?: number; skip?: number; $sort?: { createdAt?: number } }> {
+    async find(query?: ProjectQuery): Promise<{ data: Project[]; total?: number; limit?: number; skip?: number }> {
         const result = await fetchProjects(query ? { query: query as Record<string, unknown> } : undefined);
 
         if (Array.isArray(result)) {
@@ -60,9 +27,9 @@ export const projectsService = {
 
         return {
             data: result.data,
-            total: result.total,
-            limit: result.limit,
-            skip: result.skip
+            ...(result.total !== undefined && { total: result.total }),
+            ...(result.limit !== undefined && { limit: result.limit }),
+            ...(result.skip !== undefined && { skip: result.skip })
         };
     },
 
@@ -99,3 +66,4 @@ export const projectsService = {
         return () => feathersClient.service('projects').off('removed', callback);
     }
 };
+

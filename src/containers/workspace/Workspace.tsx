@@ -12,6 +12,11 @@ import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { defaultAiModel } from '@/config/environment';
 import { AiAgent } from '@/containers/aiAgent/AIAgent';
+import { ApiClient } from '@/containers/workspace/components/ApiClient';
+import { Breadcrumbs } from '@/containers/workspace/components/Breadcrumbs';
+import { CommandPalette } from '@/containers/workspace/components/CommandPalette';
+import { EditorTabs } from '@/containers/workspace/components/EditorTabs';
+import { SnapshotPanel } from '@/containers/workspace/components/SnapshotPanel';
 import { Terminal } from '@/containers/workspace/components/Terminal';
 import { TestPanel } from '@/containers/workspace/components/TestPanel';
 import { useArchitecture } from '@/hooks/useArchitecture';
@@ -19,7 +24,8 @@ import { useFiles } from '@/hooks/useFiles';
 import { useProjectCreation } from '@/hooks/useProjectCreation';
 import { emitProjectLog } from '@/hooks/useProjectLogs';
 import { useProjects } from '@/hooks/useProjects';
-import { useProjectChannel } from '@/hooks/useRealtimeUpdates';
+import { useProjectChannel, useRealtimeUpdates, useSocketEvent } from '@/hooks/useRealtimeUpdates';
+import { useSessions } from '@/hooks/useSessions';
 import { useSnapshots } from '@/hooks/useSnapshots';
 import type { Project, ProjectFile } from '@/types/feathers';
 import { clearSavedPrompt, getSavedPrompt } from '@/utils/promptStorage';
@@ -65,10 +71,11 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     const [activeView, setActiveView] = useState<'code' | 'api' | 'architecture'>('code');
     const [isTerminalOpen, setIsTerminalOpen] = useState(false);
     const [isRunning, setIsRunning] = useState(false);
-    const [isBackendReady, setIsBackendReady] = useState(false);
     const [isSnapshotCreating, setIsSnapshotCreating] = useState(false);
     const [snapshotActionId, setSnapshotActionId] = useState<string | null>(null);
     const [loadingContent, setLoadingContent] = useState(false);
+    const [openFiles, setOpenFiles] = useState<string[]>([]);
+    const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
     const creationTriggeredRef = useRef(false);
 
@@ -96,6 +103,10 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
 
     const { snapshots, loading: snapshotsLoading, createSnapshot, rollbackToSnapshot, deleteSnapshot, refresh: refreshSnapshots } = useSnapshots([]);
     const { architecture, loading: architectureLoading, error: architectureError, loadArchitecture } = useArchitecture();
+    const { currentSession, isSessionRunning, sessionProxyUrl, createSession, stopSession, loadSessions } = useSessions();
+
+    // Derive backend state from session
+    const isBackendReady = isSessionRunning;
 
     useProjectChannel(currentProjectId || null);
 
@@ -106,12 +117,17 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     }, [currentProjectId, loadProject, isBrowser]);
 
     useEffect(() => {
-        // Backend run state is scoped to the currently loaded project.
-        setIsBackendReady(false);
-        if (activeView === 'api') {
+        // Session state is scoped to the currently loaded project.
+        if (activeView === 'api' && !isSessionRunning) {
             setActiveView('code');
         }
     }, [currentProjectId]);
+
+    useEffect(() => {
+        if (currentProjectId && isBrowser) {
+            loadSessions(currentProjectId);
+        }
+    }, [currentProjectId, loadSessions, isBrowser]);
 
     useEffect(() => {
         if (currentProjectId && isBrowser) {
@@ -145,6 +161,18 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
             }
         }
     }, [currentFile, selectedFile]);
+
+    // Cmd+P → command palette
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'p') {
+                e.preventDefault();
+                setIsCommandPaletteOpen(true);
+            }
+        };
+        document.addEventListener('keydown', handler);
+        return () => document.removeEventListener('keydown', handler);
+    }, []);
 
     /**
      * Creates a new project with given prompt.
@@ -221,6 +249,8 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     const handleFileSelect = useCallback(
         async (filePath: string) => {
             setSelectedFile(filePath);
+            // Add to open tabs if not already there
+            setOpenFiles((prev) => (prev.includes(filePath) ? prev : [...prev, filePath]));
             const file = files.find((f) => getDisplayPath(f) === filePath || f.name === filePath);
             if (file) {
                 setCurrentFile(file);
@@ -415,12 +445,17 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     }, [currentProjectId]);
 
     /**
-     * Runs backend server for current project via SSE streaming.
-     * Logs appear in real-time as the process executes.
+     * Starts a sandbox container for the current project via the Sessions service.
+     * Container status transitions (starting → running) arrive via Socket.IO.
      */
     const handleRunBackend = useCallback(async () => {
         if (!currentProjectId) {
             toast.error('No project selected');
+            return;
+        }
+
+        if (currentSession?.status === 'running') {
+            toast.info('Backend is already running');
             return;
         }
 
@@ -429,81 +464,68 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         emitProjectLog({
             projectId: currentProjectId,
             type: 'system',
-            message: 'Starting backend run pipeline...',
+            message: 'Starting backend container...',
             source: 'workspace'
         });
 
         try {
-            const response = await fetch('/api/run-backend', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ projectId: currentProjectId })
+            await createSession({
+                projectId: currentProjectId,
+                userId: currentUser.feathersId,
+                language: 'python'
             });
-
-            if (!response.ok || !response.body) {
-                throw new Error(`Failed to start backend run: ${response.statusText}`);
-            }
-
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = '';
-
-            while (true) {
-                const { value, done } = await reader.read();
-                if (done) break;
-
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop() ?? '';
-
-                for (const line of lines) {
-                    if (!line.startsWith('data: ')) continue;
-                    try {
-                        const data = JSON.parse(line.slice(6));
-                        if (data.event === 'log') {
-                            emitProjectLog({
-                                projectId: currentProjectId,
-                                type: data.type,
-                                message: data.message,
-                                source: data.source || 'runner'
-                            });
-                        } else if (data.event === 'done') {
-                            const result = data.result;
-                            if (result?.data?.success) {
-                                setIsBackendReady(true);
-                                toast.success('Backend server started successfully!');
-                            } else {
-                                setIsBackendReady(false);
-                                toast.error(result?.error || 'Failed to start backend');
-                            }
-                        } else if (data.event === 'error') {
-                            emitProjectLog({
-                                projectId: currentProjectId,
-                                type: 'error',
-                                message: data.message,
-                                source: 'runner'
-                            });
-                            toast.error(data.message || 'Failed to start backend');
-                        }
-                    } catch {
-                        // ignore parse errors on partial chunks
-                    }
-                }
-            }
+            emitProjectLog({
+                projectId: currentProjectId,
+                type: 'system',
+                message: 'Container is starting — waiting for it to become ready...',
+                source: 'workspace'
+            });
         } catch (error) {
-            setIsBackendReady(false);
-            console.error('Failed to run backend:', error);
+            console.error('Failed to start session:', error);
             emitProjectLog({
                 projectId: currentProjectId,
                 type: 'error',
-                message: error instanceof Error ? error.message : 'Failed to run backend',
+                message: error instanceof Error ? error.message : 'Failed to start backend container',
                 source: 'workspace'
             });
             toast.error('Failed to start backend');
         } finally {
             setIsRunning(false);
         }
-    }, [currentProjectId]);
+    }, [currentProjectId, currentSession, createSession, currentUser.feathersId]);
+
+    // Bridge sandbox and session events into the terminal log stream
+    useSocketEvent<{ success: boolean; syntaxValid?: boolean; compilationOutput?: string; testOutput?: string; durationMs: number }>(
+        'sandbox:result',
+        (event) => {
+            if (!currentProjectId) return;
+            const status = event.success ? 'success' : 'error';
+            emitProjectLog({ projectId: currentProjectId, type: status, message: `Sandbox result: ${event.success ? 'passed' : 'failed'} (${event.durationMs}ms)`, source: 'sandbox' });
+            if (event.compilationOutput) {
+                emitProjectLog({ projectId: currentProjectId, type: event.success ? 'info' : 'error', message: event.compilationOutput, source: 'sandbox' });
+            }
+            if (event.testOutput) {
+                emitProjectLog({ projectId: currentProjectId, type: 'info', message: event.testOutput, source: 'sandbox' });
+            }
+        }
+    );
+
+    useSocketEvent<{ attempt: number; error: string }>('sandbox:retry', (event) => {
+        if (!currentProjectId) return;
+        emitProjectLog({ projectId: currentProjectId, type: 'warning', message: `Sandbox retry attempt ${event.attempt}: ${event.error}`, source: 'sandbox' });
+    });
+
+    useRealtimeUpdates<{ _id: string; status: string; proxyUrl?: string; errorMessage?: string }>('sessions', 'patched', (session) => {
+        if (!currentProjectId) return;
+        if (session.status === 'running') {
+            emitProjectLog({ projectId: currentProjectId, type: 'success', message: `Backend container is running${session.proxyUrl ? ` at ${session.proxyUrl}` : ''}`, source: 'session' });
+            toast.success('Backend server started successfully!');
+        } else if (session.status === 'stopped') {
+            emitProjectLog({ projectId: currentProjectId, type: 'system', message: 'Backend container stopped', source: 'session' });
+        } else if (session.status === 'error') {
+            emitProjectLog({ projectId: currentProjectId, type: 'error', message: `Backend container error: ${session.errorMessage || 'unknown error'}`, source: 'session' });
+        }
+    });
 
     /**
      * Handles back to dashboard action.
@@ -688,76 +710,12 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                                         onFileApplied={handleAIAppliedFile}
                                     />
                                 ) : (
-                                    <div className="h-full flex flex-col">
-                                        <div className="p-3 border-b border-gray-200">
-                                            <Button
-                                                onClick={handleCreateSnapshot}
-                                                disabled={!currentProjectId || isSnapshotCreating}
-                                                size="sm"
-                                                className="w-full h-8 text-xs"
-                                            >
-                                                {isSnapshotCreating ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <History className="w-3 h-3 mr-1" />}
-                                                Create Snapshot
-                                            </Button>
-                                        </div>
-                                        <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                                            {snapshotsLoading ? (
-                                                <div className="text-xs text-gray-500">Loading snapshots...</div>
-                                            ) : snapshots.length === 0 ? (
-                                                <div className="h-full flex items-center justify-center">
-                                                    <div className="text-center py-8">
-                                                        <History className="w-8 h-8 text-gray-300 mx-auto mb-3" />
-                                                        <p className="text-sm text-gray-500">No snapshots yet</p>
-                                                        <p className="text-xs text-gray-400 mt-1">Create one before major edits</p>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                snapshots.map((snapshot) => {
-                                                    const isBusy = snapshotActionId === snapshot._id;
-                                                    return (
-                                                        <div key={snapshot._id} className="border border-gray-200 rounded-lg p-2.5 bg-white">
-                                                            <div className="flex items-start justify-between gap-2">
-                                                                <div>
-                                                                    <p className="text-xs font-medium text-gray-900">
-                                                                        v{snapshot.version} · {snapshot.label}
-                                                                    </p>
-                                                                    <p className="text-[11px] text-gray-500 mt-0.5">
-                                                                        {snapshot.fileCount} files · {(snapshot.totalSize / 1024).toFixed(1)} KB
-                                                                    </p>
-                                                                </div>
-                                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 uppercase">
-                                                                    {snapshot.trigger}
-                                                                </span>
-                                                            </div>
-                                                            <p className="text-[11px] text-gray-400 mt-1.5">{new Date(snapshot.createdAt).toLocaleString()}</p>
-                                                            <div className="mt-2 flex items-center gap-1.5">
-                                                                <Button
-                                                                    onClick={() => handleRollbackSnapshot(snapshot._id)}
-                                                                    disabled={isBusy}
-                                                                    variant="outline"
-                                                                    size="sm"
-                                                                    className="h-6 text-[11px]"
-                                                                >
-                                                                    {isBusy ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <RotateCcw className="w-3 h-3 mr-1" />}
-                                                                    Restore
-                                                                </Button>
-                                                                <Button
-                                                                    onClick={() => handleDeleteSnapshot(snapshot._id)}
-                                                                    disabled={isBusy}
-                                                                    variant="ghost"
-                                                                    size="sm"
-                                                                    className="h-6 text-[11px] text-red-600 hover:text-red-700 hover:bg-red-50"
-                                                                >
-                                                                    <Trash2 className="w-3 h-3 mr-1" />
-                                                                    Delete
-                                                                </Button>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })
-                                            )}
-                                        </div>
-                                    </div>
+                                    <SnapshotPanel
+                                        snapshots={snapshots}
+                                        loading={snapshotsLoading}
+                                        onRollback={handleRollbackSnapshot}
+                                        onCreateSnapshot={handleCreateSnapshot}
+                                    />
                                 )}
                             </div>
                         </div>
@@ -769,16 +727,29 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                                 <div className="h-full flex flex-col overflow-hidden bg-gray-50">
                                     {activeView === 'code' ? (
                                         <>
-                                            <div className="border-b border-gray-200 px-4 py-2.5 bg-white flex items-center justify-between">
-                                                <div className="inline-flex items-center gap-2 text-sm text-gray-600">
-                                                    <Code2 className="w-4 h-4" />
-                                                    <span>{selectedFile || 'No file selected'}</span>
-                                                </div>
+                                            {/* Editor tabs */}
+                                            <EditorTabs
+                                                openFiles={openFiles}
+                                                activeFile={selectedFile}
+                                                onSelect={handleFileSelect}
+                                                onClose={(path) => {
+                                                    setOpenFiles((prev) => prev.filter((f) => f !== path));
+                                                    if (selectedFile === path) {
+                                                        const remaining = openFiles.filter((f) => f !== path);
+                                                        if (remaining.length > 0) handleFileSelect(remaining[remaining.length - 1] as string);
+                                                        else { setSelectedFile(null); setSelectedFileContent(''); }
+                                                    }
+                                                }}
+                                            />
+                                            {/* Breadcrumbs */}
+                                            {selectedFile && <Breadcrumbs path={selectedFile} />}
+                                            {/* Action bar */}
+                                            <div className="border-b border-zinc-800 px-3 py-1.5 bg-zinc-900 flex items-center justify-end gap-2">
                                                 <Button
                                                     onClick={handleSaveFile}
                                                     disabled={!selectedFile || !selectedFileContent}
                                                     size="sm"
-                                                    className="h-7 text-xs"
+                                                    className="h-6 text-xs"
                                                     variant="outline"
                                                 >
                                                     <Save className="w-3 h-3 mr-1" />
@@ -788,10 +759,10 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                                                     onClick={handleRunBackend}
                                                     disabled={!currentProjectId || isRunning}
                                                     size="sm"
-                                                    className="h-7 text-xs bg-green-600 hover:bg-green-700"
+                                                    className="h-6 text-xs bg-green-700 hover:bg-green-600 text-white border-0"
                                                 >
                                                     {isRunning ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Play className="w-3 h-3 mr-1" />}
-                                                    {isRunning ? 'Starting...' : 'Run Backend'}
+                                                    {isRunning ? 'Starting...' : isBackendReady ? 'Restart' : 'Run'}
                                                 </Button>
                                             </div>
                                             <div className="flex-1 overflow-hidden bg-white">
@@ -833,25 +804,12 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                                                     : undefined
                                             }
                                         />
-                                    ) : isBackendReady ? (
-                                        <TestPanel projectId={currentProjectId as string} />
                                     ) : (
-                                        <div className="h-full flex items-center justify-center bg-white">
-                                            <div className="text-center max-w-md px-6">
-                                                <TestTube2 className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                                                <p className="text-sm font-medium text-gray-900">API Testing is disabled</p>
-                                                <p className="text-xs text-gray-500 mt-1 mb-4">Start the backend first, then open API Testing.</p>
-                                                <Button
-                                                    onClick={handleRunBackend}
-                                                    disabled={!currentProjectId || isRunning}
-                                                    size="sm"
-                                                    className="h-8 bg-green-600 hover:bg-green-700"
-                                                >
-                                                    {isRunning ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Play className="w-3 h-3 mr-1" />}
-                                                    {isRunning ? 'Starting...' : 'Run Backend'}
-                                                </Button>
-                                            </div>
-                                        </div>
+                                        <ApiClient
+                                            {...(currentSession?._id && { sessionId: currentSession._id })}
+                                            {...(sessionProxyUrl && { sessionProxyUrl })}
+                                            isSessionRunning={isSessionRunning}
+                                        />
                                     )}
                                 </div>
                             </ResizablePanel>
@@ -895,6 +853,14 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                     <span>{files.length} files</span>
                 </div>
             </div>
+
+            {/* Command Palette */}
+            <CommandPalette
+                files={files.map((f) => ({ name: f.name, path: getDisplayPath(f) }))}
+                isOpen={isCommandPaletteOpen}
+                onClose={() => setIsCommandPaletteOpen(false)}
+                onSelect={(path) => { handleFileSelect(path); }}
+            />
         </div>
     );
 }

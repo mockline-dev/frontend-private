@@ -1,7 +1,5 @@
 'use client';
 
-import { enhancePrompt } from '@/api/enhancePrompt/enhancePrompt';
-import { inferProjectMeta } from '@/api/inferProjectMeta/inferProjectMeta';
 import { appRoutes } from '@/config/appRoutes';
 import { defaultAiModel } from '@/config/environment';
 import { UserData } from '@/containers/auth/types';
@@ -15,17 +13,22 @@ interface UseInitialScreenOptions {
     currentUser: UserData | undefined;
 }
 
-type PreparationPhase = 'idle' | 'enhancing' | 'inferring-meta';
 type ProjectStackOption = 'fast-api/python' | 'feathers/typescript';
 
 const SAVED_PROMPT_KEY = 'savedPrompt';
 
+/**
+ * Derives a project name from the prompt — short heuristic, no API call needed.
+ * Backend handles prompt enhancement internally via orchestration pipeline.
+ */
+function deriveProjectName(prompt: string): string {
+    const trimmed = prompt.trim();
+    return trimmed.length > 60 ? `${trimmed.slice(0, 57)}...` : trimmed;
+}
+
 export function useInitialScreen(options?: UseInitialScreenOptions) {
     const router = useRouter();
     const [promptValue, setPromptValue] = useState('');
-    const [enhancedPrompt, setEnhancedPrompt] = useState('');
-    const [enhanceLoading, setEnhanceLoading] = useState(false);
-    const [preparationPhase, setPreparationPhase] = useState<PreparationPhase>('idle');
     const [selectedStack, setSelectedStack] = useState<ProjectStackOption>('fast-api/python');
 
     const {
@@ -42,29 +45,10 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
         }
     });
 
-    const handleEnhancePrompt = useCallback(
-        async (prompt: string) => {
-            try {
-                setEnhanceLoading(true);
-                const [framework, language] = selectedStack.split('/') as ['fast-api' | 'feathers', 'python' | 'typescript'];
-                const response = await enhancePrompt({ userPrompt: prompt, framework, language });
-                setEnhancedPrompt(response.enhancedPrompt);
-            } catch (error) {
-                console.error('Error enhancing prompt:', error);
-                toast.error('Failed to enhance prompt');
-            } finally {
-                setEnhanceLoading(false);
-            }
-        },
-        [selectedStack]
-    );
-
     const handleSendPrompt = useCallback(
         async (prompt: string) => {
             const normalizedPrompt = prompt.trim();
-            if (!normalizedPrompt || isCreating || preparationPhase !== 'idle') {
-                return;
-            }
+            if (!normalizedPrompt || isCreating) return;
 
             if (!options?.currentUser) {
                 if (typeof window !== 'undefined') {
@@ -75,17 +59,12 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
                 return;
             }
 
+            const [framework, language] = selectedStack.split('/') as ['fast-api' | 'feathers', 'python' | 'typescript'];
+
             try {
-                setPreparationPhase('inferring-meta');
-                const [framework, language] = selectedStack.split('/') as ['fast-api' | 'feathers', 'python' | 'typescript'];
-
-                const response = await enhancePrompt({ userPrompt: normalizedPrompt, framework, language });
-                const metadata = await inferProjectMeta({ enhancedPrompt: response.enhancedPrompt });
-
-                setPreparationPhase('idle');
                 await createProject({
-                    name: metadata.name?.trim() || (normalizedPrompt.length > 60 ? `${normalizedPrompt.slice(0, 57)}...` : normalizedPrompt),
-                    description: metadata.description?.trim() || normalizedPrompt,
+                    name: deriveProjectName(normalizedPrompt),
+                    description: normalizedPrompt,
                     framework,
                     language,
                     model: defaultAiModel
@@ -93,18 +72,10 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
             } catch (error) {
                 const message = error instanceof Error ? error.message : 'Failed to create project';
                 toast.error(message);
-            } finally {
-                setPreparationPhase('idle');
             }
         },
-        [createProject, isCreating, preparationPhase, selectedStack, options?.currentUser, router]
+        [createProject, isCreating, selectedStack, options?.currentUser, router]
     );
-
-    useEffect(() => {
-        if (enhancedPrompt && enhanceLoading === false) {
-            setPromptValue(enhancedPrompt);
-        }
-    }, [enhancedPrompt, enhanceLoading]);
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
@@ -120,17 +91,20 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
     return {
         promptValue,
         setPromptValue,
-        enhancedPrompt,
-        enhanceLoading,
-        handleEnhancePrompt,
+        // Kept for UI backward compatibility — enhancement now handled server-side
+        enhancedPrompt: '',
+        enhanceLoading: false,
+        handleEnhancePrompt: async () => {},
         handleSendPrompt,
         selectedStack,
         setSelectedStack,
         creationState,
         isCreating,
-        preparationPhase,
-        isPreprocessing: preparationPhase !== 'idle',
-        showMorphLoading: isCreating && preparationPhase === 'idle',
-        isMorphing: isCreating && preparationPhase === 'idle'
+        // UI compat aliases
+        preparationPhase: 'idle' as const,
+        isPreprocessing: false,
+        showMorphLoading: isCreating,
+        isMorphing: isCreating
     };
 }
+

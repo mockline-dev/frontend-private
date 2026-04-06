@@ -6,7 +6,7 @@ import { AlertCircle, ArrowLeft, CheckCircle2, Code2, Cpu, FileCode2, Layers, Ro
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 export interface ProjectCreationLoaderProps {
-    status: 'idle' | 'creating' | 'generating' | 'ready' | 'error';
+    status: 'idle' | 'creating' | 'generating' | 'validating' | 'ready' | 'running' | 'error';
     project: Project | null;
     progress: GenerationProgress | null;
     error: string | null;

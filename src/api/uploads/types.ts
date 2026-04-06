@@ -1,16 +1,18 @@
+// Initiate response — returned by POST /uploads
 export interface Upload {
-    uploadId?: string;
-    key: string;
-    success?: boolean;
-}
-
-export interface UploadCreateData {
-    key: string;
-    content: string;
+    _id: string;
+    uri: string;        // R2 key / path
     contentType: string;
-    projectId?: string;
+    uploadId: string;   // multipart upload ID for subsequent steps
 }
 
+// Step 1: POST /uploads — initiate multipart upload
+export interface UploadCreateData {
+    key: string;        // R2 object key
+    contentType: string;
+}
+
+// Step 2: PATCH /uploads/<any> — upload a single part
 export interface UploadUpdateData {
     partNumber: number;
     uploadId: string;
@@ -18,6 +20,7 @@ export interface UploadUpdateData {
     content: Buffer;
 }
 
+// Step 3: PUT /uploads/<any> — complete multipart upload
 export interface UploadCompleteData {
     uploadId: string;
     key: string;
@@ -25,5 +28,4 @@ export interface UploadCompleteData {
         ETag: string;
         PartNumber: number;
     }[];
-    fileType: string;
 }

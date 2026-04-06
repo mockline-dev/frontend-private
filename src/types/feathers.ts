@@ -4,6 +4,32 @@
  */
 
 // ============================================================================
+// User Types
+// ============================================================================
+
+export interface User {
+    _id: string;
+    firebaseUid: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    createdAt: number;
+    updatedAt: number;
+}
+
+export interface CreateUserData {
+    firebaseUid: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+}
+
+export interface UserQuery extends QueryParams {
+    email?: string;
+    firebaseUid?: string;
+}
+
+// ============================================================================
 // Project Types
 // ============================================================================
 
@@ -65,6 +91,7 @@ export interface UpdateProjectData {
     description?: string;
     status?: Project['status'];
     errorMessage?: string;
+    jobId?: string;
     generationProgress?: Partial<GenerationProgress>;
 }
 

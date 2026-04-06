@@ -13,7 +13,7 @@ export default async function uploadFileMultipart(file: File, fileObject: File, 
             key: hashedFilename,
             contentType: file.type
         });
-        const { uploadId, key } = initResponse;
+        const { uploadId, uri: key } = initResponse;
         const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
         const parts = [];
 
@@ -52,8 +52,7 @@ export default async function uploadFileMultipart(file: File, fileObject: File, 
         const completeResponse = await updateUpload('', {
             uploadId,
             key,
-            parts,
-            fileType: file.type
+            parts
         });
         return (completeResponse as unknown as string) || null;
     } catch (error) {

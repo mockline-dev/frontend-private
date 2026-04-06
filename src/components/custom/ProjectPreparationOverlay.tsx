@@ -86,12 +86,11 @@ export default function ProjectPreparationOverlay({ visible, state, onCancel }: 
 
     // Handle visibility delay for smooth animation
     useEffect(() => {
-        if (visible) {
-            const timer = setTimeout(() => {
-                setShowLoader(true);
-            }, 300);
-            return () => clearTimeout(timer);
-        }
+        if (!visible) return;
+        const timer = setTimeout(() => {
+            setShowLoader(true);
+        }, 300);
+        return () => clearTimeout(timer);
     }, [visible]);
 
     // Calculate and update estimated time remaining

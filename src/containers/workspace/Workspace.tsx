@@ -568,10 +568,10 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         projectStatus: currentProject?.status,
         promptFromUrl: !!promptFromUrl,
         shouldShowLoader:
-            !hasError && (isCreating || (!isCreating && promptFromUrl) || (currentProject && currentProject.status !== 'ready' && currentProject.status !== 'error'))
+            !hasError && (isCreating || (!isCreating && promptFromUrl) || (currentProject && currentProject.status !== 'ready' && currentProject.status !== 'running' && currentProject.status !== 'error'))
     });
 
-    if (!hasError && (isCreating || (!isCreating && promptFromUrl) || (currentProject && currentProject.status !== 'ready' && currentProject.status !== 'error'))) {
+    if (!hasError && (isCreating || (!isCreating && promptFromUrl) || (currentProject && currentProject.status !== 'ready' && currentProject.status !== 'running' && currentProject.status !== 'error'))) {
         return (
             <ProjectCreationLoader
                 status={creationState.status}

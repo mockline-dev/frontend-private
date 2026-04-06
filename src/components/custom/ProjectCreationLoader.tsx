@@ -412,7 +412,7 @@ export function ProjectCreationLoader({
     onViewArchitecture, 
     onViewFiles 
 }: ProjectCreationLoaderProps) {
-    const isActive = status === 'creating' || status === 'generating';
+    const isActive = status === 'creating' || status === 'generating' || status === 'validating';
     const isError = status === 'error';
     const isReady = status === 'ready';
     const percentage = Math.min(100, Math.round(progress?.percentage || 0));

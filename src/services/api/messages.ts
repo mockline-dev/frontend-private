@@ -4,47 +4,13 @@ import { fetchMessageById } from '@/api/messages/fetchMessageById';
 import { fetchMessages } from '@/api/messages/fetchMessages';
 import { updateMessage } from '@/api/messages/updateMessage';
 import feathersClient from '@/services/featherClient';
+import type { CreateMessageData, Message, MessageQuery } from '@/types/feathers';
 
-export interface Message {
-    _id: string;
-    projectId: string;
-    role: 'user' | 'system' | 'assistant';
-    type: 'text' | 'file';
-    content: string;
-    tokens?: number;
-    status?: string;
-    createdAt: number;
-    updatedAt: number;
-}
-
-export interface CreateMessageData {
-    projectId: string;
-    role: 'user' | 'system' | 'assistant';
-    type?: 'text' | 'file';
-    content: string;
-    tokens?: number;
-    status?: string;
-    [key: string]: unknown;
-}
-
-export interface MessageQuery {
-    $sort?: {
-        createdAt?: 1 | -1;
-    };
-    $limit?: number;
-    $skip?: number;
-    projectId?: string;
-    [key: string]: unknown;
-}
+export type { CreateMessageData, Message, MessageQuery };
 
 export const messagesService = {
     async create(data: CreateMessageData): Promise<Message> {
-        const payload: CreateMessageData = {
-            type: 'text',
-            ...data
-        };
-
-        return await createMessage(payload);
+        return await createMessage(data);
     },
 
     async find(query?: MessageQuery): Promise<{ data: Message[]; total: number; limit: number; skip: number }> {

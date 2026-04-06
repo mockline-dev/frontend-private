@@ -53,7 +53,11 @@ export interface CreateProjectData {
     description: string;
     framework: 'fast-api' | 'feathers';
     language: 'python' | 'typescript';
-    model?: string;
+    model: string;
+    status: 'initializing' | 'generating' | 'validating' | 'ready' | 'running' | 'error';
+    jobId?: string;
+    architectureId?: string;
+    generationProgress?: Partial<GenerationProgress>;
 }
 
 export interface UpdateProjectData {
@@ -141,10 +145,8 @@ export interface RollbackResult {
 // ============================================================================
 
 export interface MessageSandboxResult {
-    syntaxValid: boolean;
-    compilationOutput?: string;
-    testOutput?: string;
-    durationMs?: number;
+    success: boolean;
+    durationMs: number;
 }
 
 export interface MessageMetadata {
@@ -159,10 +161,9 @@ export interface Message {
     _id: string;
     projectId: string;
     role: 'user' | 'system' | 'assistant';
-    type: 'text' | 'file';
     content: string;
-    tokens?: number;
-    status?: string;
+    intent?: string;
+    model?: string;
     metadata?: MessageMetadata;
     createdAt: number;
     updatedAt: number;
@@ -171,10 +172,10 @@ export interface Message {
 export interface CreateMessageData {
     projectId: string;
     role: 'user' | 'system' | 'assistant';
-    type?: 'text' | 'file';
     content: string;
-    tokens?: number;
-    status?: string;
+    intent?: string;
+    model?: string;
+    metadata?: MessageMetadata;
 }
 
 export interface UpdateMessageData {

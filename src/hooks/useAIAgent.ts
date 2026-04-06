@@ -474,7 +474,6 @@ export function useAIAgent(
                     _id: STREAMING_MESSAGE_ID,
                     projectId: chunk.projectId,
                     role: 'assistant',
-                    type: 'text',
                     content: nextContent,
                     createdAt: Date.now(),
                     updatedAt: Date.now()
@@ -645,14 +644,14 @@ export function useAIAgent(
             setIsLoading(true);
 
             try {
-                const userMessage = await messagesService.create({ projectId, role: 'user', type: 'text', content: normalized });
+                const userMessage = await messagesService.create({ projectId, role: 'user', content: normalized });
                 setMessages((prev) => (prev.find((m) => m._id === userMessage._id) ? prev : [...prev, userMessage]));
 
                 const validation = await validatePromptWithAI(normalized);
 
                 if (!validation.isValid) {
                     const followUp = validation.suggestedQuestions?.join('\n\n') ?? "I couldn't understand your request. Could you provide more details?";
-                    const assistantMessage = await messagesService.create({ projectId, role: 'assistant', type: 'text', content: followUp });
+                    const assistantMessage = await messagesService.create({ projectId, role: 'assistant', content: followUp });
                     setMessages((prev) => (prev.find((m) => m._id === assistantMessage._id) ? prev : [...prev, assistantMessage]));
                     return;
                 }

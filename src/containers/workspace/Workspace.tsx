@@ -165,7 +165,8 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                     description: prompt,
                     framework: 'fast-api',
                     language: 'python',
-                    model: defaultAiModel
+                    model: defaultAiModel,
+                    status: 'initializing'
                 });
             } catch (error) {
                 console.error('[Workspace] Failed to create project:', error);

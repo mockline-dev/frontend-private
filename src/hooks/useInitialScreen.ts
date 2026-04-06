@@ -64,7 +64,8 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
                     description: normalizedPrompt,
                     framework: 'fast-api',
                     language: 'python',
-                    model: defaultAiModel
+                    model: defaultAiModel,
+                    status: 'initializing'
                 });
 
                 if (!project) return;
@@ -73,7 +74,6 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
                 await createMessage({
                     projectId: project._id,
                     role: 'user',
-                    type: 'text',
                     content: normalizedPrompt
                 });
             } catch (error) {

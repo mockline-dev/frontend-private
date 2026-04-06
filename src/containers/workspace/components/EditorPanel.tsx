@@ -5,12 +5,13 @@ import { EditorTabs } from '@/components/custom/EditorTabs';
 import { MonacoEditor } from '@/components/custom/MonacoEditor';
 import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
+import { ApiClient } from '@/containers/workspace/components/ApiClient';
+import { Breadcrumbs } from '@/containers/workspace/components/Breadcrumbs';
 import { Terminal } from '@/containers/workspace/components/Terminal';
-import { TestPanel } from '@/containers/workspace/components/TestPanel';
 import type { ActiveView, CursorPosition, EditorTab } from '@/types/workspace';
 import type { Architecture } from '@/types/feathers';
 import { EmptyEditor } from '@/components/custom/EmptyEditor';
-import { Code2, Loader2, Play, Save, TestTube2 } from 'lucide-react';
+import { Code2, Loader2, Play, Save, Square } from 'lucide-react';
 
 interface EditorPanelProps {
     activeView: ActiveView;
@@ -24,9 +25,13 @@ interface EditorPanelProps {
     architecture: Architecture | null;
     architectureLoading: boolean;
     architectureError: string | null;
+    sessionStatus?: 'starting' | 'running' | 'stopped' | 'error' | null;
+    sessionProxyUrl?: string | null;
+    terminalOutput?: string[];
     onContentChange: (value: string | undefined) => void;
     onSaveFile: () => void;
     onRunBackend: () => void;
+    onStopBackend?: () => void;
     onTerminalClose: () => void;
     onLoadArchitecture: () => void;
     onCursorPositionChange?: ((pos: CursorPosition) => void) | undefined;
@@ -50,9 +55,13 @@ export function EditorPanel({
     architecture,
     architectureLoading,
     architectureError,
+    sessionStatus,
+    sessionProxyUrl,
+    terminalOutput = [],
     onContentChange,
     onSaveFile,
     onRunBackend,
+    onStopBackend,
     onTerminalClose,
     onLoadArchitecture,
     onCursorPositionChange,
@@ -75,9 +84,10 @@ export function EditorPanel({
                                 onCloseTab={onCloseTab}
                             />
                             <div className="border-b border-zinc-200 px-4 py-2.5 bg-white flex items-center justify-between">
-                                <div className="inline-flex items-center gap-2 text-sm text-zinc-600">
-                                    <Code2 className="w-4 h-4" />
-                                    <span>{selectedFile || 'No file selected'}</span>
+                                <div className="inline-flex items-center gap-2 text-sm text-zinc-600 min-w-0">
+                                    <Code2 className="w-4 h-4 shrink-0" />
+                                    <Breadcrumbs filePath={selectedFile} />
+                                    {!selectedFile && <span className="text-zinc-400">No file selected</span>}
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <Button
@@ -90,15 +100,26 @@ export function EditorPanel({
                                         <Save className="w-3 h-3 mr-1" />
                                         Save
                                     </Button>
-                                    <Button
-                                        onClick={onRunBackend}
-                                        disabled={!currentProjectId || isRunning}
-                                        size="sm"
-                                        className="h-7 text-xs bg-green-600 hover:bg-green-700"
-                                    >
-                                        {isRunning ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Play className="w-3 h-3 mr-1" />}
-                                        {isRunning ? 'Starting...' : 'Run Backend'}
-                                    </Button>
+                                    {isBackendReady && onStopBackend ? (
+                                        <Button
+                                            onClick={onStopBackend}
+                                            size="sm"
+                                            className="h-7 text-xs bg-red-600 hover:bg-red-700"
+                                        >
+                                            <Square className="w-3 h-3 mr-1" />
+                                            Stop
+                                        </Button>
+                                    ) : (
+                                        <Button
+                                            onClick={onRunBackend}
+                                            disabled={!currentProjectId || isRunning}
+                                            size="sm"
+                                            className="h-7 text-xs bg-green-600 hover:bg-green-700"
+                                        >
+                                            {isRunning ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Play className="w-3 h-3 mr-1" />}
+                                            {isRunning ? 'Starting...' : 'Run Backend'}
+                                        </Button>
+                                    )}
                                 </div>
                             </div>
                             <div className="flex-1 overflow-hidden bg-white">
@@ -132,25 +153,14 @@ export function EditorPanel({
                             error={architectureError}
                             {...(currentProjectId ? { onRefresh: onLoadArchitecture } : {})}
                         />
-                    ) : isBackendReady ? (
-                        <TestPanel projectId={currentProjectId as string} />
                     ) : (
-                        <div className="h-full flex items-center justify-center bg-white">
-                            <div className="text-center max-w-md px-6">
-                                <TestTube2 className="w-10 h-10 text-zinc-300 mx-auto mb-3" />
-                                <p className="text-sm font-medium text-zinc-900">API Testing is disabled</p>
-                                <p className="text-xs text-zinc-500 mt-1 mb-4">Start the backend first, then open API Testing.</p>
-                                <Button
-                                    onClick={onRunBackend}
-                                    disabled={!currentProjectId || isRunning}
-                                    size="sm"
-                                    className="h-8 bg-green-600 hover:bg-green-700"
-                                >
-                                    {isRunning ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Play className="w-3 h-3 mr-1" />}
-                                    {isRunning ? 'Starting...' : 'Run Backend'}
-                                </Button>
-                            </div>
-                        </div>
+                        <ApiClient
+                            sessionProxyUrl={sessionProxyUrl ?? null}
+                            isSessionRunning={isBackendReady}
+                            {...(currentProjectId ? { projectId: currentProjectId } : {})}
+                            onRunBackend={onRunBackend}
+                            isRunning={isRunning}
+                        />
                     )}
                 </div>
             </ResizablePanel>
@@ -158,7 +168,14 @@ export function EditorPanel({
                 <>
                     <ResizableHandle className="h-1 bg-zinc-200 hover:bg-blue-400 transition-colors cursor-row-resize" />
                     <ResizablePanel minSize={15} defaultSize={30}>
-                        <Terminal variant="panel" isOpen={true} onClose={onTerminalClose} projectId={currentProjectId as string} />
+                        <Terminal
+                            variant="panel"
+                            isOpen={true}
+                            onClose={onTerminalClose}
+                            projectId={currentProjectId}
+                            sessionStatus={sessionStatus}
+                            sessionOutput={terminalOutput}
+                        />
                     </ResizablePanel>
                 </>
             )}

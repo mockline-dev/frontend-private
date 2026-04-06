@@ -84,6 +84,7 @@ export function ProjectList({
                     >
                         <option value="all">All Status</option>
                         <option value="ready">Ready</option>
+                        <option value="running">Running</option>
                         <option value="generating">Generating</option>
                         <option value="validating">Validating</option>
                         <option value="error">Error</option>

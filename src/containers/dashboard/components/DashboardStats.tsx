@@ -10,7 +10,7 @@ interface DashboardStatsProps {
 
 export function DashboardStats({ projects, loading }: DashboardStatsProps) {
     const totalProjects = projects.length;
-    const readyProjects = projects.filter((p) => p.status === 'ready').length;
+    const readyProjects = projects.filter((p) => p.status === 'ready' || p.status === 'running').length;
 
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);

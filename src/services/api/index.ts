@@ -4,5 +4,6 @@ export * from './aiService'
 export * from './files'
 export * from './messages'
 export * from './projects'
+export * from './sessions'
 export * from './users'
 

@@ -3,7 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import type { Project } from '@/types/feathers';
-import { AlertCircle, ArrowRight, CheckCircle, Clock, Trash2 } from 'lucide-react';
+import { AlertCircle, ArrowRight, CheckCircle, Clock, Play, Trash2 } from 'lucide-react';
 
 interface ProjectCardProps {
     project: Project;
@@ -18,6 +18,8 @@ export function ProjectCard({ project, onClick, onDelete, isDeleting = false, fo
         switch (status) {
             case 'ready':
                 return <CheckCircle className="w-4 h-4 text-green-600" />;
+            case 'running':
+                return <Play className="w-4 h-4 text-green-500" />;
             case 'generating':
             case 'validating':
                 return <Clock className="w-4 h-4 text-blue-600" />;

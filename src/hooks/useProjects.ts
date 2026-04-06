@@ -172,7 +172,7 @@ export function useProjects(initialProjects: Project[] = [], opts?: { disableRea
                 return;
             }
 
-            socket.emit('join-project', projectId);
+            socket.emit('join', `projects/${projectId}`);
         },
         [isBrowser]
     );
@@ -187,7 +187,7 @@ export function useProjects(initialProjects: Project[] = [], opts?: { disableRea
                 return;
             }
 
-            socket.emit('leave-project', projectId);
+            socket.emit('leave', `projects/${projectId}`);
         },
         [isBrowser]
     );

@@ -22,8 +22,8 @@ export interface ProjectCreationFormProps {
     isSubmitting: boolean;
     /** Callback invoked when form values change */
     onChange: (values: ProjectCreationFormProps['values']) => void;
-    /** Callback invoked when form is submitted */
-    onSubmit: (data: CreateProjectData) => void;
+    /** Callback invoked when form is submitted — userId is injected by the caller */
+    onSubmit: (data: Omit<CreateProjectData, 'userId'>) => void;
     /** Callback invoked when user cancels */
     onCancel?: () => void;
 }

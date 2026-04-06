@@ -90,8 +90,8 @@ export const useProjectChannel = (projectId: string | null) => {
         if (!projectId) return;
 
         const joinProject = () => {
-            socket.emit('join-project', projectId);
-            console.log(`[useProjectChannel] Joined project channel: ${projectId}`);
+            socket.emit('join', `projects/${projectId}`);
+            console.log(`[useProjectChannel] Joined project channel: projects/${projectId}`);
         };
 
         // Join project channel
@@ -101,8 +101,8 @@ export const useProjectChannel = (projectId: string | null) => {
         // Cleanup: leave project channel on unmount or projectId change
         return () => {
             socket.off('connect', joinProject);
-            socket.emit('leave-project', projectId);
-            console.log(`[useProjectChannel] Left project channel: ${projectId}`);
+            socket.emit('leave', `projects/${projectId}`);
+            console.log(`[useProjectChannel] Left project channel: projects/${projectId}`);
         };
     }, [projectId]);
 };

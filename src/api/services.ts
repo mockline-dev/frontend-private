@@ -7,6 +7,7 @@ export const apiServices = {
     uploads: 'uploads' as const,
     media: 'media' as const,
     messages: 'messages' as const,
+    sessions: 'sessions' as const,
 
     // AI services
     aiModels: 'ai-models' as const,
@@ -21,5 +22,8 @@ export const apiServices = {
     inferProjectMeta: 'infer-project-meta' as const,
 
     // Architecture service
-    architecture: 'architecture' as const
+    architecture: 'architecture' as const,
+
+    // API test proxy
+    apiTest: 'api-test' as const
 } as const;

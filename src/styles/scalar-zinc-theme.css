@@ -1,0 +1,80 @@
+/*
+ * Scalar API Client — zinc/shadcn theme override
+ * Scoped to .scalar-app to prevent global style leakage.
+ * Supports light and dark modes via .dark class on <html>.
+ */
+
+.scalar-app {
+    /* ── Accent ─────────────────────────────────────────────────── */
+    --scalar-color-accent: #18181b;          /* zinc-900 */
+    --scalar-color-accent-secondary: #3f3f46; /* zinc-700 */
+
+    /* ── Typography ─────────────────────────────────────────────── */
+    --scalar-font:        inherit;            /* inherit app font */
+    --scalar-font-code:   "JetBrains Mono", "Fira Code", monospace;
+
+    /* ── Backgrounds ─────────────────────────────────────────────── */
+    --scalar-background-1: #ffffff;           /* card */
+    --scalar-background-2: #fafafa;           /* zinc-50 */
+    --scalar-background-3: #f4f4f5;           /* zinc-100 */
+    --scalar-background-accent: #f4f4f5;
+
+    /* ── Text ──────────────────────────────────────────────────── */
+    --scalar-color-1: #09090b;               /* zinc-950 */
+    --scalar-color-2: #3f3f46;               /* zinc-700 */
+    --scalar-color-3: #71717a;               /* zinc-500 */
+    --scalar-color-disabled: #a1a1aa;        /* zinc-400 */
+
+    /* ── Borders ──────────────────────────────────────────────── */
+    --scalar-border-color: #e4e4e7;          /* zinc-200 */
+    --scalar-border-width: 1px;
+    --scalar-border-radius: 6px;
+    --scalar-border-radius-lg: 10px;
+
+    /* ── Shadows ──────────────────────────────────────────────── */
+    --scalar-shadow-1: 0 1px 3px 0 rgb(0 0 0 / 0.08);
+    --scalar-shadow-2: 0 4px 12px 0 rgb(0 0 0 / 0.10);
+
+    /* ── HTTP method colours ─────────────────────────────────── */
+    --scalar-color-green:  #16a34a;          /* green-600 */
+    --scalar-color-orange: #d97706;          /* amber-600 */
+    --scalar-color-blue:   #2563eb;          /* blue-600 */
+    --scalar-color-red:    #dc2626;          /* red-600 */
+    --scalar-color-purple: #7c3aed;          /* violet-600 */
+}
+
+/* ── Dark mode ────────────────────────────────────────────────────── */
+.dark .scalar-app {
+    --scalar-color-accent:           #f4f4f5;  /* zinc-100 */
+    --scalar-color-accent-secondary: #a1a1aa;  /* zinc-400 */
+
+    --scalar-background-1: #09090b;            /* zinc-950 */
+    --scalar-background-2: #18181b;            /* zinc-900 */
+    --scalar-background-3: #27272a;            /* zinc-800 */
+    --scalar-background-accent: #27272a;
+
+    --scalar-color-1: #f4f4f5;                 /* zinc-100 */
+    --scalar-color-2: #a1a1aa;                 /* zinc-400 */
+    --scalar-color-3: #71717a;                 /* zinc-500 */
+    --scalar-color-disabled: #52525b;          /* zinc-600 */
+
+    --scalar-border-color: #27272a;            /* zinc-800 */
+}
+
+/* ── Misc fixes ───────────────────────────────────────────────────── */
+.scalar-app .scalar-api-client {
+    height: 100%;
+}
+
+/* Prevent Scalar from overriding the app's scrollbar */
+.scalar-app ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+.scalar-app ::-webkit-scrollbar-track {
+    background: transparent;
+}
+.scalar-app ::-webkit-scrollbar-thumb {
+    background: var(--scalar-border-color);
+    border-radius: 3px;
+}

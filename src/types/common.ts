@@ -78,7 +78,7 @@ export interface UploadedFile extends FileInfo {
 }
 
 // Project related types
-export type ProjectStatus = 'idle' | 'generating' | 'ready' | 'error'
+export type ProjectStatus = 'idle' | 'initializing' | 'generating' | 'validating' | 'ready' | 'running' | 'error'
 export type FileType = 'file' | 'folder'
 export type LogLevel = 'info' | 'error' | 'success' | 'warning' | 'system'
 

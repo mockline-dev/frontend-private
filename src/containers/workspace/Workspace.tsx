@@ -14,11 +14,11 @@ import { buildFileTree, getDisplayPath } from '@/containers/workspace/utils/file
 import { useArchitecture } from '@/hooks/useArchitecture';
 import { useFiles } from '@/hooks/useFiles';
 import { useProjectCreation } from '@/hooks/useProjectCreation';
-import { emitProjectLog } from '@/hooks/useProjectLogs';
 import { useProjects } from '@/hooks/useProjects';
-import { useProjectChannel } from '@/hooks/useRealtimeUpdates';
+import { useProjectChannel, useSocketEvent } from '@/hooks/useRealtimeUpdates';
+import { useSessions } from '@/hooks/useSessions';
 import { useSnapshots } from '@/hooks/useSnapshots';
-import type { Project, ProjectFile } from '@/types/feathers';
+import type { Project, ProjectFile, SandboxResultEvent } from '@/types/feathers';
 import type { ActiveView, CursorPosition, SidebarView } from '@/types/workspace';
 import { QuickOpen } from '@/components/custom/QuickOpen';
 import { useOpenTabs } from '@/hooks/useOpenTabs';
@@ -53,6 +53,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     const [isTerminalOpen, setIsTerminalOpen] = useState(false);
     const [isRunning, setIsRunning] = useState(false);
     const [isBackendReady, setIsBackendReady] = useState(false);
+    const [terminalOutput, setTerminalOutput] = useState<string[]>([]);
     const [isSnapshotCreating, setIsSnapshotCreating] = useState(false);
     const [snapshotActionId, setSnapshotActionId] = useState<string | null>(null);
     const [loadingContent, setLoadingContent] = useState(false);
@@ -86,6 +87,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     const { files, loadFiles, updateFile, currentFile, setCurrentFile } = useFiles(initialFiles);
     const { snapshots, loading: snapshotsLoading, createSnapshot, rollbackToSnapshot, deleteSnapshot, refresh: refreshSnapshots } = useSnapshots([]);
     const { architecture, loading: architectureLoading, error: architectureError, loadArchitecture } = useArchitecture();
+    const { currentSession, isSessionRunning, sessionProxyUrl, createSession, stopSession, loadSessions } = useSessions();
 
     useProjectChannel(currentProjectId || null);
 
@@ -95,8 +97,40 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
 
     useEffect(() => {
         setIsBackendReady(false);
+        setTerminalOutput([]);
         setActiveView((v) => v === 'api' ? 'code' : v);
     }, [currentProjectId]);
+
+    useEffect(() => {
+        if (currentProjectId && isBrowser) loadSessions(currentProjectId);
+    }, [currentProjectId, loadSessions, isBrowser]);
+
+    // Sync session running state with isBackendReady
+    useEffect(() => {
+        setIsBackendReady(isSessionRunning);
+        if (isSessionRunning) {
+            setIsRunning(false);
+            setIsTerminalOpen(true);
+            toast.success('Backend session started');
+        }
+        if (currentSession?.status === 'error') {
+            setIsRunning(false);
+            toast.error(currentSession.errorMessage || 'Session failed to start');
+        }
+    }, [isSessionRunning, currentSession?.status, currentSession?.errorMessage]);
+
+    // Listen for sandbox results to display in terminal
+    useSocketEvent<SandboxResultEvent>('sandbox:result', (event) => {
+        // payload has no projectId — scoped to joined project channel
+        const ts = new Date().toLocaleTimeString('en-US', { hour12: false });
+        const status = event.success ? '\x1b[92m✔ Sandbox passed\x1b[0m' : '\x1b[91m✖ Sandbox failed\x1b[0m';
+        const lines = [
+            `\x1b[90m[${ts}]\x1b[0m ${status}${event.durationMs !== undefined ? `  \x1b[90m(${event.durationMs}ms)\x1b[0m` : ''}`,
+            ...(event.compilationOutput ? event.compilationOutput.split('\n').map((l) => `  ${l}`) : []),
+            ...(event.testOutput ? event.testOutput.split('\n').map((l) => `  ${l}`) : [])
+        ];
+        setTerminalOutput((prev) => [...prev, ...lines]);
+    });
 
     useEffect(() => {
         if (currentProjectId && isBrowser) loadFiles(currentProjectId);
@@ -126,6 +160,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
             if (isCreating) return;
             try {
                 await createProject({
+                    userId: currentUser.feathersId,
                     name: prompt.length > 50 ? prompt.substring(0, 50) + '...' : prompt,
                     description: prompt,
                     framework: 'fast-api',
@@ -136,7 +171,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                 console.error('[Workspace] Failed to create project:', error);
             }
         },
-        [createProject, isCreating]
+        [createProject, isCreating, currentUser.feathersId]
     );
 
     useEffect(() => {
@@ -354,62 +389,42 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
 
     const handleRunBackend = useCallback(async () => {
         if (!currentProjectId) { toast.error('No project selected'); return; }
+        if (isRunning) return;
 
         setIsRunning(true);
         setIsTerminalOpen(true);
-        emitProjectLog({ projectId: currentProjectId, type: 'system', message: 'Starting backend run pipeline...', source: 'workspace' });
 
         try {
-            const response = await fetch('/api/run-backend', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ projectId: currentProjectId })
+            if (currentSession?.status === 'running') {
+                // Stop existing session first
+                await stopSession(currentSession._id);
+            }
+
+            const session = await createSession({
+                projectId: currentProjectId,
+                userId: currentUser.feathersId,
+                language: 'python'
             });
 
-            if (!response.ok || !response.body) throw new Error(`Failed to start backend run: ${response.statusText}`);
-
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = '';
-
-            while (true) {
-                const { value, done } = await reader.read();
-                if (done) break;
-
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop() ?? '';
-
-                for (const line of lines) {
-                    if (!line.startsWith('data: ')) continue;
-                    try {
-                        const data = JSON.parse(line.slice(6));
-                        if (data.event === 'log') {
-                            emitProjectLog({ projectId: currentProjectId, type: data.type, message: data.message, source: data.source || 'runner' });
-                        } else if (data.event === 'done') {
-                            if (data.result?.data?.success) {
-                                setIsBackendReady(true);
-                                toast.success('Backend server started successfully!');
-                            } else {
-                                setIsBackendReady(false);
-                                toast.error(data.result?.error || 'Failed to start backend');
-                            }
-                        } else if (data.event === 'error') {
-                            emitProjectLog({ projectId: currentProjectId, type: 'error', message: data.message, source: 'runner' });
-                            toast.error(data.message || 'Failed to start backend');
-                        }
-                    } catch { /* ignore parse errors on partial chunks */ }
-                }
-            }
+            const ts = new Date().toLocaleTimeString('en-US', { hour12: false });
+            setTerminalOutput((prev) => [...prev, `\x1b[90m[${ts}]\x1b[0m \x1b[33m\x1b[1m◉ STARTING\x1b[0m  Session ${session._id.slice(0, 8)} initialising…`]);
         } catch (error) {
-            setIsBackendReady(false);
-            console.error('Failed to run backend:', error);
-            emitProjectLog({ projectId: currentProjectId, type: 'error', message: error instanceof Error ? error.message : 'Failed to run backend', source: 'workspace' });
-            toast.error('Failed to start backend');
-        } finally {
+            console.error('[Workspace] Failed to start session:', error);
+            toast.error('Failed to start backend session');
             setIsRunning(false);
         }
-    }, [currentProjectId]);
+    }, [currentProjectId, isRunning, currentSession, createSession, stopSession, currentUser.feathersId]);
+
+    const handleStopBackend = useCallback(async () => {
+        if (!currentSession) return;
+        try {
+            await stopSession(currentSession._id);
+            setIsBackendReady(false);
+            toast.success('Session stopped');
+        } catch (error) {
+            toast.error('Failed to stop session');
+        }
+    }, [currentSession, stopSession]);
 
     const handleBackToDashboard = useCallback(() => { resetState(); router.push('/dashboard'); }, [resetState, router]);
     const handleRetry = useCallback(() => { resetState(); }, [resetState]);
@@ -516,9 +531,13 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                             architecture={architecture}
                             architectureLoading={architectureLoading}
                             architectureError={architectureError}
+                            sessionStatus={currentSession?.status ?? null}
+                            sessionProxyUrl={sessionProxyUrl}
+                            terminalOutput={terminalOutput}
                             onContentChange={handleContentChange}
                             onSaveFile={handleSaveFile}
                             onRunBackend={handleRunBackend}
+                            onStopBackend={handleStopBackend}
                             onTerminalClose={() => setIsTerminalOpen(false)}
                             onLoadArchitecture={() => currentProjectId && loadArchitecture(currentProjectId)}
                             onCursorPositionChange={setCursorPosition}

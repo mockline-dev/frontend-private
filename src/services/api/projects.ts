@@ -4,34 +4,9 @@ import { fetchProjectById } from '@/api/projects/fetchProjectById';
 import { fetchProjects } from '@/api/projects/fetchProjects';
 import { updateProject } from '@/api/projects/updateProject';
 import feathersClient from '@/services/featherClient';
+import type { CreateProjectData, Project } from '@/types/feathers';
 
-export interface Project {
-    _id: string;
-    userId: string;
-    name: string;
-    description: string;
-    framework: string;
-    language: string;
-    model: string;
-    status: 'initializing' | 'generating' | 'ready' | 'error';
-    errorMessage?: string;
-    createdAt: number;
-    updatedAt: number;
-    // Progress tracking fields
-    filesGenerated?: number;
-    totalFiles?: number;
-    generationProgress?: number;
-    currentStage?: string;
-}
-
-export interface CreateProjectData {
-    name: string;
-    description: string;
-    framework: string;
-    language: string;
-    model: string;
-    [key: string]: unknown;
-}
+export type { Project, CreateProjectData };
 
 export interface ProjectQuery {
     $sort?: {
@@ -60,9 +35,9 @@ export const projectsService = {
 
         return {
             data: result.data,
-            total: result.total,
-            limit: result.limit,
-            skip: result.skip
+            ...(result.total !== undefined ? { total: result.total } : {}),
+            ...(result.limit !== undefined ? { limit: result.limit } : {}),
+            ...(result.skip !== undefined ? { skip: result.skip } : {})
         };
     },
 
@@ -78,7 +53,6 @@ export const projectsService = {
         return await deleteProject({ id });
     },
 
-    // Real-time event listeners - Note: These should use feathersClient for real-time updates
     onCreated(callback: (project: Project) => void) {
         feathersClient.service('projects').on('created', callback);
         return () => feathersClient.service('projects').off('created', callback);

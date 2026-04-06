@@ -15,7 +15,16 @@ export interface GenerationProgress {
     totalFiles: number;
     startedAt?: number;
     completedAt?: number;
+    failedAt?: number;
     errorMessage?: string;
+    warnings?: string[];
+    errorType?: string;
+    retryAttempts?: number;
+    validationResults?: {
+        passCount: number;
+        failCount: number;
+        failedFiles: string[];
+    };
 }
 
 export interface Project {
@@ -26,9 +35,12 @@ export interface Project {
     framework: 'fast-api' | 'feathers';
     language: 'python' | 'typescript';
     model: string;
-    status: 'initializing' | 'generating' | 'validating' | 'ready' | 'error';
+    status: 'initializing' | 'generating' | 'validating' | 'ready' | 'running' | 'error';
     errorMessage?: string;
+    errorType?: string;
+    retryAttempts?: number;
     jobId?: string;
+    architectureId?: string;
     generationProgress?: GenerationProgress;
     createdAt: number;
     updatedAt: number;
@@ -36,6 +48,7 @@ export interface Project {
 }
 
 export interface CreateProjectData {
+    userId: string;
     name: string;
     description: string;
     framework: 'fast-api' | 'feathers';
@@ -127,6 +140,21 @@ export interface RollbackResult {
 // Message Types
 // ============================================================================
 
+export interface MessageSandboxResult {
+    syntaxValid: boolean;
+    compilationOutput?: string;
+    testOutput?: string;
+    durationMs?: number;
+}
+
+export interface MessageMetadata {
+    usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number };
+    sandboxResult?: MessageSandboxResult;
+    filesGenerated?: string[];   // file paths persisted to R2
+    enhancedPrompt?: string;
+    [key: string]: unknown;
+}
+
 export interface Message {
     _id: string;
     projectId: string;
@@ -135,6 +163,7 @@ export interface Message {
     content: string;
     tokens?: number;
     status?: string;
+    metadata?: MessageMetadata;
     createdAt: number;
     updatedAt: number;
 }
@@ -365,4 +394,130 @@ export interface GenerationProgressEventData {
     stage: string;
     percentage: number;
     currentFile?: string;
+}
+
+// ============================================================================
+// Session Types
+// ============================================================================
+
+export interface Session {
+    _id: string;
+    projectId: string;
+    userId: string;
+    status: 'starting' | 'running' | 'stopped' | 'error';
+    containerId?: string;
+    proxyUrl?: string;
+    port?: number;
+    language: 'python' | 'typescript';
+    startedAt?: number;
+    stoppedAt?: number;
+    errorMessage?: string;
+    createdAt: number;
+    updatedAt: number;
+}
+
+export interface CreateSessionData {
+    projectId: string;
+    userId: string;
+    language: 'python' | 'typescript';
+}
+
+export interface SessionQuery extends QueryParams {
+    projectId?: string;
+    userId?: string;
+    status?: Session['status'];
+}
+
+// ============================================================================
+// Orchestration Event Types
+// Payloads match backend alpha/e2e-generation-pipeline branch
+// ============================================================================
+
+/** Fired when orchestration pipeline starts */
+export interface OrchestrationStartedEvent {
+    projectId: string;
+    userId: string;
+}
+
+/** Fired when intent is classified */
+export interface OrchestrationIntentEvent {
+    intent: string;
+    confidence: number;
+    entities: Record<string, unknown>;
+}
+
+/** Fired when prompt has been enhanced */
+export interface OrchestrationEnhancedEvent {
+    originalLength: number;
+    enhancedLength: number;
+}
+
+/** Fired when RAG context is retrieved */
+export interface OrchestrationContextEvent {
+    chunksFound: number;
+    tokensUsed: number;
+}
+
+/** Streaming LLM token */
+export interface OrchestrationTokenEvent {
+    token: string;
+}
+
+export interface OrchestrationUsage {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+}
+
+/** Fired when generation completes */
+export interface OrchestrationCompletedEvent {
+    intent: string;
+    contentLength: number;
+    usage: OrchestrationUsage;
+}
+
+/** Fired when pipeline encounters a fatal error */
+export interface OrchestrationErrorEvent {
+    error: string;
+}
+
+/** Fired on agentic sandbox retry attempt */
+export interface SandboxRetryEvent {
+    attempt: number;
+    error: string;
+}
+
+/** Fired with sandbox execution result */
+export interface SandboxResultEvent {
+    success: boolean;
+    syntaxValid: boolean;
+    compilationOutput?: string;
+    testOutput?: string;
+    durationMs?: number;
+}
+
+/** Fired when files are persisted to R2 */
+export interface FilesPersistedEvent {
+    fileIds: string[];
+    snapshotId?: string;
+    uploadedCount: number;
+    filePaths: string[];
+}
+
+/** Fired when indexing completes */
+export interface IndexingCompletedEvent {
+    projectId: string;
+    indexed: number;
+    removed: number;
+    changes: {
+        added: number;
+        modified: number;
+        deleted: number;
+    };
+}
+
+/** Fired when indexing fails */
+export interface IndexingErrorEvent {
+    projectId: string;
+    error: string;
 }

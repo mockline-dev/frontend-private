@@ -6,13 +6,14 @@ import '@/styles/scalar-zinc-theme.css';
 import { ApiClientModalProvider, useApiClientModal } from '@scalar/api-client-react';
 import { Button } from '@/components/ui/button';
 import { Loader2, Play, Zap } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 
 // ─── Inner component that has access to the modal hook ────────────────────────
 
 interface ApiClientPanelInnerProps {
     sessionProxyUrl: string | null;
     isSessionRunning: boolean;
+    isActive: boolean;
     openApiSpecUrl?: string | undefined;
     projectId?: string | undefined;
     onRunBackend: () => void;
@@ -22,23 +23,19 @@ interface ApiClientPanelInnerProps {
 function ApiClientPanelInner({
     sessionProxyUrl,
     isSessionRunning,
+    isActive,
     openApiSpecUrl,
     onRunBackend,
     isRunning
 }: ApiClientPanelInnerProps) {
     const client = useApiClientModal();
-    const openedRef = useRef(false);
 
-    // Auto-open modal when session becomes ready
+    // Auto-open modal whenever the API tab is active and session is running
     useEffect(() => {
-        if (isSessionRunning && client && !openedRef.current) {
-            openedRef.current = true;
+        if (isActive && isSessionRunning && client) {
             client.open(undefined);
         }
-        if (!isSessionRunning) {
-            openedRef.current = false;
-        }
-    }, [isSessionRunning, client]);
+    }, [isActive, isSessionRunning, client]);
 
     if (!isSessionRunning) {
         return (
@@ -99,12 +96,13 @@ function ApiClientPanelInner({
 interface ApiClientProps {
     sessionProxyUrl: string | null;
     isSessionRunning: boolean;
+    isActive: boolean;
     projectId?: string | undefined;
     onRunBackend: () => void;
     isRunning: boolean;
 }
 
-export function ApiClient({ sessionProxyUrl, isSessionRunning, projectId, onRunBackend, isRunning }: ApiClientProps) {
+export function ApiClient({ sessionProxyUrl, isSessionRunning, isActive, projectId, onRunBackend, isRunning }: ApiClientProps) {
     // Build OpenAPI spec URL from the session proxy (FastAPI auto-generates /openapi.json)
     const openApiSpecUrl = sessionProxyUrl ? `${sessionProxyUrl}/openapi.json` : undefined;
 
@@ -119,6 +117,7 @@ export function ApiClient({ sessionProxyUrl, isSessionRunning, projectId, onRunB
                 <ApiClientPanelInner
                     sessionProxyUrl={sessionProxyUrl}
                     isSessionRunning={isSessionRunning}
+                    isActive={isActive}
                     {...(openApiSpecUrl ? { openApiSpecUrl } : {})}
                     {...(projectId ? { projectId } : {})}
                     onRunBackend={onRunBackend}

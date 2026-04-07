@@ -562,13 +562,15 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                 </ResizablePanelGroup>
             </div>
 
-            <Button
-                onClick={() => setIsTerminalOpen((prev) => !prev)}
-                className="fixed bottom-4 right-4 h-10 bg-black hover:bg-zinc-800 text-white shadow-lg z-40"
-            >
-                <TerminalIcon className="w-4 h-4 mr-2" />
-                {isTerminalOpen ? 'Hide Terminal' : 'Terminal'}
-            </Button>
+            {activeView === 'code' && (
+                <Button
+                    onClick={() => setIsTerminalOpen((prev) => !prev)}
+                    className="fixed bottom-4 right-4 h-10 bg-black hover:bg-zinc-800 text-white shadow-lg z-40"
+                >
+                    <TerminalIcon className="w-4 h-4 mr-2" />
+                    {isTerminalOpen ? 'Hide Terminal' : 'Terminal'}
+                </Button>
+            )}
 
             <QuickOpen
                 open={quickOpenOpen}

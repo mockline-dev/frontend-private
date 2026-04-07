@@ -63,7 +63,7 @@ export function EditorPanel({
 }: EditorPanelProps) {
     return (
         <ResizablePanelGroup key={isTerminalOpen ? 'terminal-open' : 'terminal-closed'} direction="vertical" className="h-full">
-            <ResizablePanel defaultSize={isTerminalOpen ? 70 : 100} minSize={isTerminalOpen ? 50 : 30}>
+            <ResizablePanel defaultSize={isTerminalOpen && activeView === 'code' ? 70 : 100} minSize={isTerminalOpen && activeView === 'code' ? 50 : 30}>
                 <div className="h-full flex flex-col overflow-hidden bg-zinc-50">
                     {activeView === 'code' ? (
                         <>
@@ -118,6 +118,7 @@ export function EditorPanel({
                         <ApiClient
                             sessionProxyUrl={sessionProxyUrl ?? null}
                             isSessionRunning={isBackendReady}
+                            isActive={true}
                             {...(currentProjectId ? { projectId: currentProjectId } : {})}
                             onRunBackend={onRunBackend}
                             isRunning={isRunning}
@@ -125,7 +126,7 @@ export function EditorPanel({
                     )}
                 </div>
             </ResizablePanel>
-            {isTerminalOpen && (
+            {isTerminalOpen && activeView === 'code' && (
                 <>
                     <ResizableHandle className="h-1 bg-zinc-200 hover:bg-blue-400 transition-colors cursor-row-resize" />
                     <ResizablePanel minSize={15} defaultSize={30}>

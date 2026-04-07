@@ -71,20 +71,16 @@ export function WorkspaceHeader({
                     Code
                 </button>
                 <button
-                    onClick={() => {
-                        if (isBackendReady) onViewChange('api');
-                    }}
-                    disabled={!isBackendReady}
+                    onClick={() => onViewChange('api')}
                     className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
                         activeView === 'api'
                             ? 'bg-white text-zinc-900 shadow-sm'
-                            : isBackendReady
-                              ? 'text-zinc-600 hover:text-zinc-900'
-                              : 'text-zinc-400 cursor-not-allowed'
+                            : 'text-zinc-600 hover:text-zinc-900'
                     }`}
                 >
                     <TestTube2 className="w-3.5 h-3.5" />
                     API Testing
+                    {isBackendReady && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />}
                 </button>
             </div>
 

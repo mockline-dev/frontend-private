@@ -436,8 +436,9 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
 
     const hasError = creationState.status === 'error' || currentProject?.status === 'error';
     const promptFromUrl = searchParams.get('prompt');
+    const isWorkspaceLoading = !!currentProjectId && !currentProject && !isCreating;
 
-    if (!hasError && (isCreating || (!isCreating && promptFromUrl) || (currentProject && currentProject.status !== 'ready' && currentProject.status !== 'error'))) {
+    if (!hasError && (isCreating || (!isCreating && promptFromUrl))) {
         return (
             <ProjectCreationLoader
                 status={creationState.status}
@@ -460,6 +461,32 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                 onBackToDashboard={handleBackToDashboard}
                 onRetry={handleRetry}
             />
+        );
+    }
+
+    if (isWorkspaceLoading) {
+        return (
+            <div className="h-screen flex flex-col bg-background">
+                <WorkspaceHeader
+                    currentUser={currentUser}
+                    projectName={projectName}
+                    selectedFile={selectedFile}
+                    activeView={activeView}
+                    isBackendReady={isBackendReady}
+                    currentProjectId={currentProjectId}
+                    filesCount={0}
+                    hasUnsavedChanges={false}
+                    onViewChange={setActiveView}
+                    onDownload={handleDownload}
+                    onNavigate={handleNavigate}
+                />
+                <div className="flex-1 flex items-center justify-center">
+                    <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                        <div className="w-6 h-6 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
+                        <span className="text-sm">Loading workspace…</span>
+                    </div>
+                </div>
+            </div>
         );
     }
 

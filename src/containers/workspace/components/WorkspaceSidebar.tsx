@@ -126,7 +126,6 @@ export function WorkspaceSidebar({
                 ) : sidebarView === 'ai' ? (
                     <AiAgent
                         {...(currentProjectId ? { projectId: currentProjectId } : {})}
-                        files={files}
                         onFilesChanged={onFilesChanged}
                     />
                 ) : (

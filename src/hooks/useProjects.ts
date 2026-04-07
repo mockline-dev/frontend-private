@@ -6,7 +6,7 @@ import { fetchProjectById } from '@/api/projects/fetchProjectById';
 import { fetchProjects } from '@/api/projects/fetchProjects';
 import { updateProject as updateProjectAction } from '@/api/projects/updateProject';
 import feathersClient from '@/services/featherClient';
-import { CreateProjectData, ProgressEventData, Project, ProjectQuery } from '@/types/feathers';
+import { CreateProjectData, Project, ProjectQuery } from '@/types/feathers';
 import { useCallback, useState } from 'react';
 import { useRealtimeUpdates } from './useRealtimeUpdates';
 
@@ -89,7 +89,6 @@ export function useProjects(initialProjects: Project[] = [], opts?: { disableRea
                 throw new Error('Cannot create project on the server');
             }
 
-            setLoading(true);
             setError(null);
 
             try {
@@ -102,8 +101,6 @@ export function useProjects(initialProjects: Project[] = [], opts?: { disableRea
                 setError(message);
                 console.error('[useProjects] Error creating project:', err);
                 throw err;
-            } finally {
-                setLoading(false);
             }
         },
         [isBrowser]
@@ -116,7 +113,6 @@ export function useProjects(initialProjects: Project[] = [], opts?: { disableRea
                 throw new Error('Cannot update project on the server');
             }
 
-            setLoading(true);
             setError(null);
 
             try {
@@ -129,8 +125,6 @@ export function useProjects(initialProjects: Project[] = [], opts?: { disableRea
                 setError(message);
                 console.error('[useProjects] Error updating project:', err);
                 throw err;
-            } finally {
-                setLoading(false);
             }
         },
         [isBrowser]
@@ -143,7 +137,6 @@ export function useProjects(initialProjects: Project[] = [], opts?: { disableRea
                 throw new Error('Cannot delete project on the server');
             }
 
-            setLoading(true);
             setError(null);
 
             try {
@@ -155,8 +148,6 @@ export function useProjects(initialProjects: Project[] = [], opts?: { disableRea
                 setError(message);
                 console.error('[useProjects] Error deleting project:', err);
                 throw err;
-            } finally {
-                setLoading(false);
             }
         },
         [isBrowser]
@@ -212,31 +203,6 @@ export function useProjects(initialProjects: Project[] = [], opts?: { disableRea
         if (disableRealtime) return;
         setProjects((prev) => prev.filter((p) => p._id !== project._id));
         setCurrentProject((prev) => (prev?._id === project._id ? null : prev));
-    });
-
-    useRealtimeUpdates<ProgressEventData>('projects', 'progress', (data) => {
-        if (disableRealtime) return;
-        setProjects((prev) =>
-            prev.map((p) =>
-                p._id === data.projectId
-                    ? {
-                          ...p,
-                          status: data.status,
-                          generationProgress: data.progress
-                      }
-                    : p
-            )
-        );
-
-        setCurrentProject((prev) =>
-            prev?._id === data.projectId
-                ? {
-                      ...prev,
-                      status: data.status,
-                      generationProgress: data.progress
-                  }
-                : prev
-        );
     });
 
     return {

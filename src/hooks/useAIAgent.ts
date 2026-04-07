@@ -149,8 +149,7 @@ export function useAIAgent({
 
             try {
                 await createMessageAction({ projectId, role: 'user', content: trimmed });
-                // Real message will arrive via 'messages created' feathers event
-                setMessages((prev) => prev.filter((m) => m._id !== optimisticUser._id));
+                // Keep optimistic message — real 'messages created' event will deduplicate it
                 setIsStreaming(true);
             } catch (err) {
                 const msg = err instanceof Error ? err.message : 'Failed to send message';
@@ -201,7 +200,13 @@ export function useAIAgent({
     useRealtimeUpdates<Message>('messages', 'created', (message) => {
         if (message.projectId !== projectId) return;
         setMessages((prev) => {
-            const filtered = prev.filter((m) => m._id !== STREAMING_MESSAGE_ID && m._id !== message._id);
+            // Remove streaming placeholder, any existing copy, and optimistic user message with same content
+            const filtered = prev.filter(
+                (m) =>
+                    m._id !== STREAMING_MESSAGE_ID &&
+                    m._id !== message._id &&
+                    !(m._id.startsWith('optimistic-') && m.role === message.role && m.content === message.content)
+            );
             return [...filtered, message].sort((a, b) => a.createdAt - b.createdAt);
         });
         if (message.role === 'assistant') {

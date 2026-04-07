@@ -2,10 +2,9 @@
 
 import Header from '@/components/custom/Header';
 import { useProjects } from '@/hooks/useProjects';
-import { useSocketEvent } from '@/hooks/useRealtimeUpdates';
-import type { ProgressEventData, Project } from '@/types/feathers';
+import type { Project } from '@/types/feathers';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { UserData } from '../auth/types';
 import { DashboardStats } from './components/DashboardStats';
@@ -32,25 +31,37 @@ export function Dashboard({ currentUser, initialProjects = [] }: DashboardProps)
         }
     }, [loadProjects]);
 
+    const joinedIdsRef = useRef<Set<string>>(new Set());
+
     useEffect(() => {
-        if (typeof window !== 'undefined') {
-            projects.forEach((project) => {
+        if (typeof window === 'undefined') return;
+
+        const currentIds = new Set(projects.map((p) => p._id));
+
+        // Join new projects
+        projects.forEach((project) => {
+            if (!joinedIdsRef.current.has(project._id)) {
                 joinProject(project._id);
-            });
-        }
+                joinedIdsRef.current.add(project._id);
+            }
+        });
+
+        // Leave removed projects
+        joinedIdsRef.current.forEach((id) => {
+            if (!currentIds.has(id)) {
+                leaveProject(id);
+                joinedIdsRef.current.delete(id);
+            }
+        });
 
         return () => {
-            if (typeof window !== 'undefined') {
-                projects.forEach((project) => {
-                    leaveProject(project._id);
-                });
-            }
+            if (typeof window === 'undefined') return;
+            const joinedIds = joinedIdsRef.current;
+            joinedIds.forEach((id) => leaveProject(id));
+            joinedIds.clear();
         };
-    }, [projects, joinProject, leaveProject]);
-
-    useSocketEvent<ProgressEventData>('progress', (data) => {
-        console.log('Progress update received:', data);
-    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [projects]);
 
     useEffect(() => {
         if (error) {

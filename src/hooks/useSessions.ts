@@ -87,8 +87,8 @@ export function useSessions(): UseSessionsReturn {
 
             try {
                 await deleteSessionAction({ id: sessionId });
-                setSessions((prev) => prev.filter((s) => s._id !== sessionId));
-                setCurrentSession((prev) => (prev?._id === sessionId ? null : prev));
+                // Don't optimistically remove — the 'sessions patched' event will update status to 'stopped'
+                // and 'sessions removed' will handle actual deletion
             } catch (err) {
                 const message = err instanceof Error ? err.message : 'Failed to stop session';
                 setError(message);

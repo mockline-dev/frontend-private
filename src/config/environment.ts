@@ -64,31 +64,10 @@ if (!config.backendUrl) {
 export default config
 
 // Helper functions
-export const getApiUrl = (endpoint: string) => {
-  const baseUrl = config.aiServiceUrl.replace(/\/$/, '')
-  const cleanEndpoint = endpoint.replace(/^\//, '')
-  return `${baseUrl}/${cleanEndpoint}`
-}
-
 export const getBackendUrl = (endpoint: string) => {
   const baseUrl = config.backendUrl.replace(/\/$/, '')
   const cleanEndpoint = endpoint.replace(/^\//, '')
   return `${baseUrl}/${cleanEndpoint}`
-}
-
-export const isFileTypeSupported = (filename: string): boolean => {
-  const extension = filename.toLowerCase().substring(filename.lastIndexOf('.'))
-  return config.supportedFileTypes.includes(extension)
-}
-
-export const formatFileSize = (bytes: number): string => {
-  if (bytes === 0) return '0 Bytes'
-  
-  const k = 1024
-  const sizes = ['Bytes', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 // Export individual config values for convenience

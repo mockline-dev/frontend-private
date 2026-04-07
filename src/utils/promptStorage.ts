@@ -7,16 +7,6 @@
 const PROMPT_STORAGE_KEY = 'pending_prompt';
 
 /**
- * Save a prompt to sessionStorage
- * @param prompt - The prompt string to save
- */
-export function savePrompt(prompt: string): void {
-  if (typeof window !== 'undefined') {
-    sessionStorage.setItem(PROMPT_STORAGE_KEY, prompt);
-  }
-}
-
-/**
  * Retrieve a saved prompt from sessionStorage
  * @returns The saved prompt string, or null if not found
  */
@@ -36,13 +26,3 @@ export function clearSavedPrompt(): void {
   }
 }
 
-/**
- * Check if there is a saved prompt in sessionStorage
- * @returns true if a prompt exists, false otherwise
- */
-export function hasSavedPrompt(): boolean {
-  if (typeof window !== 'undefined') {
-    return sessionStorage.getItem(PROMPT_STORAGE_KEY) !== null;
-  }
-  return false;
-}

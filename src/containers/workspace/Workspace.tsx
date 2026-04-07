@@ -397,9 +397,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                 userId: currentUser.feathersId,
                 language: 'python'
             });
-
-            const ts = new Date().toLocaleTimeString('en-US', { hour12: false });
-            setTerminalOutput((prev) => [...prev, `\x1b[90m[${ts}]\x1b[0m \x1b[33m\x1b[1m◉ STARTING\x1b[0m  Session ${session._id.slice(0, 8)} initialising…`]);
+            void session; // status transitions written by Terminal component via sessionStatus prop
         } catch (error) {
             console.error('[Workspace] Failed to start session:', error);
             toast.error('Failed to start backend session');

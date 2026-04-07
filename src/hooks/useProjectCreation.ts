@@ -1,6 +1,6 @@
 'use client';
 
-import { CreateProjectData, FilesPersistedEvent, GenerationProgress, IndexingCompletedEvent, IndexingErrorEvent, OrchestrationErrorEvent, OrchestrationIntentEvent, OrchestrationStartedEvent, Project, SandboxResultEvent } from '@/types/feathers';
+import { CreateProjectData, FilesPersistedEvent, GenerationProgress, IndexingCompletedEvent, IndexingErrorEvent, OrchestrationErrorEvent, OrchestrationStartedEvent, Project, SandboxResultEvent } from '@/types/feathers';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useProjects } from './useProjects';
 import { useProjectChannel, useRealtimeUpdates, useSocketEvent } from './useRealtimeUpdates';
@@ -172,18 +172,62 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
 
     // New orchestration event handlers (payloads per backend alpha/e2e-generation-pipeline)
     // Events arrive on the joined project channel — no projectId in most payloads
+    const hasReceivedFirstTokenRef = useRef(false);
+
     useSocketEvent<OrchestrationStartedEvent>('orchestration:started', (event) => {
         if (event.projectId !== project?._id) return; // has projectId
+        hasReceivedFirstTokenRef.current = false;
         setStatus('generating');
+        setProgress((prev) => ({
+            ...(prev ?? { filesGenerated: 0, totalFiles: 0 }),
+            currentStage: 'analyzing',
+            percentage: 5,
+        }));
     });
 
-    useSocketEvent<OrchestrationIntentEvent>('orchestration:intent', (event) => {
+    useSocketEvent('orchestration:intent', () => {
         // payload: { intent, confidence, entities } — no projectId
-        setProgress((prev) => ({ ...(prev ?? { percentage: 10, filesGenerated: 0, totalFiles: 0 }), currentStage: event.intent }));
+        // Map to 'analyzing' stage regardless of intent string from backend
+        setProgress((prev) => ({
+            ...(prev ?? { filesGenerated: 0, totalFiles: 0 }),
+            currentStage: 'analyzing',
+            percentage: 15,
+        }));
     });
 
-    // orchestration:enhanced payload is { originalLength, enhancedLength } — enhancedPrompt
-    // is stored in the assistant message metadata, not in the event. No action needed here.
+    useSocketEvent('orchestration:enhanced', () => {
+        setProgress((prev) => ({
+            ...(prev ?? { filesGenerated: 0, totalFiles: 0 }),
+            currentStage: 'planning',
+            percentage: 25,
+        }));
+    });
+
+    useSocketEvent('orchestration:context', () => {
+        setProgress((prev) => ({
+            ...(prev ?? { filesGenerated: 0, totalFiles: 0 }),
+            currentStage: 'planning',
+            percentage: 35,
+        }));
+    });
+
+    useSocketEvent('orchestration:token', () => {
+        if (hasReceivedFirstTokenRef.current) return;
+        hasReceivedFirstTokenRef.current = true;
+        setProgress((prev) => ({
+            ...(prev ?? { filesGenerated: 0, totalFiles: 0 }),
+            currentStage: 'generating',
+            percentage: 50,
+        }));
+    });
+
+    useSocketEvent('orchestration:completed', () => {
+        setProgress((prev) => ({
+            ...(prev ?? { filesGenerated: 0, totalFiles: 0 }),
+            currentStage: 'validating',
+            percentage: 70,
+        }));
+    });
 
     useSocketEvent<OrchestrationErrorEvent>('orchestration:error', (event) => {
         // payload: { error } — no projectId
@@ -195,22 +239,29 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
     useSocketEvent<SandboxResultEvent>('sandbox:result', (event) => {
         // payload: { success, syntaxValid, compilationOutput, testOutput?, durationMs } — no projectId
         setSandboxSuccess(event.success);
+        setProgress((prev) => ({
+            ...(prev ?? { filesGenerated: 0, totalFiles: 0 }),
+            currentStage: 'validating',
+            percentage: 80,
+        }));
     });
 
     useSocketEvent<FilesPersistedEvent>('files:persisted', (event) => {
         // payload: { fileIds, snapshotId, uploadedCount, filePaths } — no projectId
         setProgress((prev) => ({
-            ...(prev ?? { percentage: 80, filesGenerated: 0, totalFiles: 0, currentStage: 'persisting' }),
-            filesGenerated: event.uploadedCount
+            ...(prev ?? { filesGenerated: 0, totalFiles: 0 }),
+            currentStage: 'finalizing',
+            percentage: 90,
+            filesGenerated: event.uploadedCount,
         }));
     });
 
     useSocketEvent<IndexingCompletedEvent>('indexing:completed', (event) => {
         if (event.projectId !== project?._id) return; // has projectId
         setProgress((prev) => ({
-            ...(prev ?? { percentage: 100, filesGenerated: 0, totalFiles: 0, currentStage: 'indexed' }),
-            currentStage: 'indexed',
-            percentage: 100
+            ...(prev ?? { filesGenerated: 0, totalFiles: 0 }),
+            currentStage: 'finalizing',
+            percentage: 100,
         }));
     });
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { Check, Copy } from 'lucide-react';
-import { useState } from 'react';
+import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
@@ -13,12 +13,27 @@ interface MarkdownMessageProps {
     className?: string;
 }
 
-function CodeBlock({ language, children }: { language: string; children: string }) {
+/**
+ * Recursively extract plain text from React children (needed because rehype-highlight
+ * wraps code content in <span> elements before our custom `code` component receives them).
+ */
+function extractTextContent(node: React.ReactNode): string {
+    if (typeof node === 'string' || typeof node === 'number') return String(node);
+    if (Array.isArray(node)) return node.map(extractTextContent).join('');
+    if (React.isValidElement(node)) {
+        const el = node as React.ReactElement<{ children?: React.ReactNode }>;
+        return extractTextContent(el.props.children);
+    }
+    return '';
+}
+
+function CodeBlock({ language, children }: { language: string; children: React.ReactNode }) {
     const [copied, setCopied] = useState(false);
+    const plainText = extractTextContent(children);
 
     const handleCopy = async () => {
         try {
-            await navigator.clipboard.writeText(children);
+            await navigator.clipboard.writeText(plainText);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         } catch {
@@ -61,7 +76,6 @@ const components: Components = {
     code({ className, children, ...props }) {
         const match = /language-(\w+)/.exec(className || '');
         const isInline = !match;
-        const content = String(children).replace(/\n$/, '');
 
         if (isInline) {
             return (
@@ -71,7 +85,7 @@ const components: Components = {
             );
         }
 
-        return <CodeBlock language={match[1] ?? ''}>{content}</CodeBlock>;
+        return <CodeBlock language={match[1] ?? ''}>{children}</CodeBlock>;
     },
     a({ href, children }) {
         return (

@@ -1,6 +1,5 @@
 'use client';
 
-import { defaultAiModel } from '@/config/environment';
 import type { CursorPosition } from '@/types/workspace';
 import type { Project } from '@/types/feathers';
 
@@ -19,6 +18,8 @@ export function WorkspaceStatusBar({
     cursorPosition,
     language
 }: WorkspaceStatusBarProps) {
+    const modelLabel = currentProject?.model ?? 'no model';
+
     return (
         <div className="h-6 bg-zinc-100 border-t border-zinc-200 flex items-center justify-between px-3 text-[11px] text-zinc-500 select-none">
             <div className="flex items-center gap-3">
@@ -50,7 +51,7 @@ export function WorkspaceStatusBar({
                 )}
                 {language && <span>{language}</span>}
                 {language && <span className="text-zinc-300">·</span>}
-                <span>Model: {defaultAiModel}</span>
+                <span>Model: {modelLabel}</span>
                 <span className="text-zinc-300">·</span>
                 <span>{filesCount} files</span>
             </div>

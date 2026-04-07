@@ -4,9 +4,9 @@ import { createFeathersServerClient } from '@/services/feathersServer';
 
 import { apiServices } from '../services';
 
-import { Upload, UploadUpdateData } from './types';
+import { UploadUpdateData, UploadPartResponse } from './types';
 
-export const patchUpload = async (id: string, data: UploadUpdateData): Promise<Upload> => {
+export const patchUpload = async (id: string, data: UploadUpdateData): Promise<UploadPartResponse> => {
     try {
         const server = await createFeathersServerClient();
         const result = await server.service(apiServices.uploads).patch(id, data);

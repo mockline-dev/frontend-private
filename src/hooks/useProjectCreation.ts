@@ -1,6 +1,6 @@
 'use client';
 
-import { CreateProjectData, FilesPersistedEvent, GenerationProgress, IndexingCompletedEvent, IndexingErrorEvent, OrchestrationCompletedEvent, OrchestrationErrorEvent, OrchestrationIntentEvent, OrchestrationStartedEvent, Project, SandboxResultEvent } from '@/types/feathers';
+import { CreateProjectData, FilesPersistedEvent, GenerationProgress, IndexingCompletedEvent, IndexingErrorEvent, OrchestrationErrorEvent, OrchestrationIntentEvent, OrchestrationStartedEvent, Project, SandboxResultEvent } from '@/types/feathers';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useProjects } from './useProjects';
 import { useProjectChannel, useRealtimeUpdates, useSocketEvent } from './useRealtimeUpdates';
@@ -168,37 +168,6 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
         (data) => data._id === project?._id
     );
 
-    useRealtimeUpdates<{ projectId: string; status: Project['status']; progress: GenerationProgress }>(
-        'projects',
-        'progress',
-        (event) => {
-            if (event.projectId !== project?._id) {
-                return;
-            }
-
-            setProgress(event.progress);
-
-            if (event.status === 'error') {
-                const message = event.progress.errorMessage || 'Project generation failed';
-                setLocalError(message);
-                setStatus('error');
-                optionsRef.current?.onError?.(message);
-                return;
-            }
-
-            if (event.status === 'ready') {
-                setStatus('ready');
-                if (project) {
-                    optionsRef.current?.onSuccess?.(project);
-                }
-                return;
-            }
-
-            setStatus('generating');
-        },
-        (event) => event.projectId === project?._id
-    );
-
     useProjectChannel(project?._id || null);
 
     // New orchestration event handlers (payloads per backend alpha/e2e-generation-pipeline)
@@ -215,15 +184,6 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
 
     // orchestration:enhanced payload is { originalLength, enhancedLength } — enhancedPrompt
     // is stored in the assistant message metadata, not in the event. No action needed here.
-
-    useSocketEvent<OrchestrationCompletedEvent>('orchestration:completed', () => {
-        // payload: { intent, contentLength, usage } — no projectId
-        // Project 'patched' event will set status → 'ready'. We optimistically update here too.
-        if (project && (status === 'generating' || status === 'creating')) {
-            setStatus('ready');
-            optionsRef.current?.onSuccess?.(project);
-        }
-    });
 
     useSocketEvent<OrchestrationErrorEvent>('orchestration:error', (event) => {
         // payload: { error } — no projectId

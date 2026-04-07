@@ -2,6 +2,8 @@
 
 import { deleteFile as deleteFileApi } from '@/api/files/deleteFile';
 import { createUpload } from '@/api/uploads/createUpload';
+import { patchUpload } from '@/api/uploads/patchUpload';
+import { updateUpload } from '@/api/uploads/updateUpload';
 import { UserData } from '@/containers/auth/types';
 import type { File } from '@/services/api/files';
 import { filesService } from '@/services/api/files';
@@ -59,11 +61,20 @@ export function useFileEditor(
                 throw new Error('You do not have permission to modify/delete this project');
             }
 
-            await createUpload({
-                key: file.key,
-                content,
-                contentType: 'text/plain',
-                projectId
+            await createUpload({ key: file.key, contentType: 'text/plain' }).then(async (initiated) => {
+                const bytes = new TextEncoder().encode(content);
+                const base64 = btoa(String.fromCharCode(...bytes));
+                const { ETag } = await patchUpload('upload', {
+                    key: file.key,
+                    uploadId: initiated.uploadId,
+                    partNumber: 1,
+                    content: base64 as unknown as Buffer,
+                });
+                await updateUpload('upload', {
+                    key: file.key,
+                    uploadId: initiated.uploadId,
+                    parts: [{ ETag, PartNumber: 1 }],
+                });
             });
 
             await filesService.patch(file._id, {
@@ -95,11 +106,20 @@ export function useFileEditor(
             try {
                 const key = `${projectId}/${name}`;
 
-                await createUpload({
-                    key,
-                    content: fileContent,
-                    contentType: 'text/plain',
-                    projectId
+                await createUpload({ key, contentType: fileType }).then(async (initiated) => {
+                    const bytes = new TextEncoder().encode(fileContent);
+                    const base64 = btoa(String.fromCharCode(...bytes));
+                    const { ETag } = await patchUpload('upload', {
+                        key,
+                        uploadId: initiated.uploadId,
+                        partNumber: 1,
+                        content: base64 as unknown as Buffer,
+                    });
+                    await updateUpload('upload', {
+                        key,
+                        uploadId: initiated.uploadId,
+                        parts: [{ ETag, PartNumber: 1 }],
+                    });
                 });
 
                 await filesService.create({

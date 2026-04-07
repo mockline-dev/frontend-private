@@ -1,6 +1,5 @@
 'use client';
 
-import { ArchitectureGraph } from '@/components/custom/ArchitectureGraph';
 import { EditorTabs } from '@/components/custom/EditorTabs';
 import { MonacoEditor } from '@/components/custom/MonacoEditor';
 import { Button } from '@/components/ui/button';
@@ -9,7 +8,6 @@ import { ApiClient } from '@/containers/workspace/components/ApiClient';
 import { Breadcrumbs } from '@/containers/workspace/components/Breadcrumbs';
 import { Terminal } from '@/containers/workspace/components/Terminal';
 import type { ActiveView, CursorPosition, EditorTab } from '@/types/workspace';
-import type { Architecture } from '@/types/feathers';
 import { EmptyEditor } from '@/components/custom/EmptyEditor';
 import { Code2, Loader2, Play, Save, Square } from 'lucide-react';
 
@@ -22,9 +20,6 @@ interface EditorPanelProps {
     isRunning: boolean;
     isBackendReady: boolean;
     currentProjectId: string | undefined;
-    architecture: Architecture | null;
-    architectureLoading: boolean;
-    architectureError: string | null;
     sessionStatus?: 'starting' | 'running' | 'stopped' | 'error' | null;
     sessionProxyUrl?: string | null;
     terminalOutput?: string[];
@@ -33,7 +28,6 @@ interface EditorPanelProps {
     onRunBackend: () => void;
     onStopBackend?: () => void;
     onTerminalClose: () => void;
-    onLoadArchitecture: () => void;
     onCursorPositionChange?: ((pos: CursorPosition) => void) | undefined;
     onOpenQuickOpen?: (() => void) | undefined;
     // Tab system
@@ -52,9 +46,6 @@ export function EditorPanel({
     isRunning,
     isBackendReady,
     currentProjectId,
-    architecture,
-    architectureLoading,
-    architectureError,
     sessionStatus,
     sessionProxyUrl,
     terminalOutput = [],
@@ -63,13 +54,12 @@ export function EditorPanel({
     onRunBackend,
     onStopBackend,
     onTerminalClose,
-    onLoadArchitecture,
     onCursorPositionChange,
     onOpenQuickOpen,
     tabs,
     activeTabId,
     onSelectTab,
-    onCloseTab
+    onCloseTab,
 }: EditorPanelProps) {
     return (
         <ResizablePanelGroup key={isTerminalOpen ? 'terminal-open' : 'terminal-closed'} direction="vertical" className="h-full">
@@ -77,12 +67,7 @@ export function EditorPanel({
                 <div className="h-full flex flex-col overflow-hidden bg-zinc-50">
                     {activeView === 'code' ? (
                         <>
-                            <EditorTabs
-                                tabs={tabs}
-                                activeTabId={activeTabId}
-                                onSelectTab={onSelectTab}
-                                onCloseTab={onCloseTab}
-                            />
+                            <EditorTabs tabs={tabs} activeTabId={activeTabId} onSelectTab={onSelectTab} onCloseTab={onCloseTab} />
                             <div className="border-b border-zinc-200 px-4 py-2.5 bg-white flex items-center justify-between">
                                 <div className="inline-flex items-center gap-2 text-sm text-zinc-600 min-w-0">
                                     <Code2 className="w-4 h-4 shrink-0" />
@@ -90,32 +75,17 @@ export function EditorPanel({
                                     {!selectedFile && <span className="text-zinc-400">No file selected</span>}
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <Button
-                                        onClick={onSaveFile}
-                                        disabled={!selectedFile || !selectedFileContent}
-                                        size="sm"
-                                        className="h-7 text-xs"
-                                        variant="outline"
-                                    >
+                                    <Button onClick={onSaveFile} disabled={!selectedFile || !selectedFileContent} size="sm" className="h-7 text-xs" variant="outline">
                                         <Save className="w-3 h-3 mr-1" />
                                         Save
                                     </Button>
                                     {isBackendReady && onStopBackend ? (
-                                        <Button
-                                            onClick={onStopBackend}
-                                            size="sm"
-                                            className="h-7 text-xs bg-red-600 hover:bg-red-700"
-                                        >
+                                        <Button onClick={onStopBackend} size="sm" className="h-7 text-xs bg-red-600 hover:bg-red-700">
                                             <Square className="w-3 h-3 mr-1" />
                                             Stop
                                         </Button>
                                     ) : (
-                                        <Button
-                                            onClick={onRunBackend}
-                                            disabled={!currentProjectId || isRunning}
-                                            size="sm"
-                                            className="h-7 text-xs bg-green-600 hover:bg-green-700"
-                                        >
+                                        <Button onClick={onRunBackend} disabled={!currentProjectId || isRunning} size="sm" className="h-7 text-xs bg-green-600 hover:bg-green-700">
                                             {isRunning ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Play className="w-3 h-3 mr-1" />}
                                             {isRunning ? 'Starting...' : 'Run Backend'}
                                         </Button>
@@ -140,19 +110,10 @@ export function EditorPanel({
                                         {...(onCursorPositionChange ? { onCursorPositionChange } : {})}
                                     />
                                 ) : (
-                                    <EmptyEditor
-                                        {...(onOpenQuickOpen ? { onOpenQuickOpen } : {})}
-                                    />
+                                    <EmptyEditor {...(onOpenQuickOpen ? { onOpenQuickOpen } : {})} />
                                 )}
                             </div>
                         </>
-                    ) : activeView === 'architecture' ? (
-                        <ArchitectureGraph
-                            architecture={architecture}
-                            loading={architectureLoading}
-                            error={architectureError}
-                            {...(currentProjectId ? { onRefresh: onLoadArchitecture } : {})}
-                        />
                     ) : (
                         <ApiClient
                             sessionProxyUrl={sessionProxyUrl ?? null}
@@ -168,14 +129,7 @@ export function EditorPanel({
                 <>
                     <ResizableHandle className="h-1 bg-zinc-200 hover:bg-blue-400 transition-colors cursor-row-resize" />
                     <ResizablePanel minSize={15} defaultSize={30}>
-                        <Terminal
-                            variant="panel"
-                            isOpen={true}
-                            onClose={onTerminalClose}
-                            projectId={currentProjectId}
-                            sessionStatus={sessionStatus}
-                            sessionOutput={terminalOutput}
-                        />
+                        <Terminal variant="panel" isOpen={true} onClose={onTerminalClose} projectId={currentProjectId} sessionStatus={sessionStatus} sessionOutput={terminalOutput} />
                     </ResizablePanel>
                 </>
             )}

@@ -3,6 +3,8 @@
 import { fetchFileContent } from '@/api/files/fetchFileContent';
 import { downloadProject } from '@/api/projects/downloadProject';
 import { createUpload } from '@/api/uploads/createUpload';
+import { patchUpload } from '@/api/uploads/patchUpload';
+import { updateUpload } from '@/api/uploads/updateUpload';
 import { ProjectCreationLoader } from '@/components/custom/ProjectCreationLoader';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { defaultAiModel } from '@/config/environment';
@@ -11,7 +13,6 @@ import { WorkspaceHeader } from '@/containers/workspace/components/WorkspaceHead
 import { WorkspaceSidebar } from '@/containers/workspace/components/WorkspaceSidebar';
 import { WorkspaceStatusBar } from '@/containers/workspace/components/WorkspaceStatusBar';
 import { buildFileTree, getDisplayPath } from '@/containers/workspace/utils/fileTree';
-import { useArchitecture } from '@/hooks/useArchitecture';
 import { useFiles } from '@/hooks/useFiles';
 import { useProjectCreation } from '@/hooks/useProjectCreation';
 import { useProjects } from '@/hooks/useProjects';
@@ -86,7 +87,6 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     const { currentProject, loadProject } = useProjects(initialProject ? [initialProject] : []);
     const { files, loadFiles, updateFile, currentFile, setCurrentFile } = useFiles(initialFiles);
     const { snapshots, loading: snapshotsLoading, createSnapshot, rollbackToSnapshot, deleteSnapshot, refresh: refreshSnapshots } = useSnapshots([]);
-    const { architecture, loading: architectureLoading, error: architectureError, loadArchitecture } = useArchitecture();
     const { currentSession, isSessionRunning, sessionProxyUrl, createSession, stopSession, loadSessions } = useSessions();
 
     useProjectChannel(currentProjectId || null);
@@ -139,10 +139,6 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     useEffect(() => {
         if (currentProjectId && isBrowser) refreshSnapshots(currentProjectId);
     }, [currentProjectId, refreshSnapshots, isBrowser]);
-
-    useEffect(() => {
-        if (currentProjectId && isBrowser) loadArchitecture(currentProjectId);
-    }, [currentProjectId, loadArchitecture, isBrowser]);
 
     useEffect(() => {
         if (currentProject) setProjectName(currentProject.name);
@@ -239,39 +235,34 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         if (selectedFile) markDirty(selectedFile);
     }, [selectedFile, markDirty]);
 
-    const handleAIAppliedFile = useCallback(
-        async (event: { action: 'create' | 'modify' | 'delete'; filename: string; content?: string }) => {
-            if (!currentProjectId) return;
-
-            const normalizedSelected = (selectedFile || '').replace(/^\.\//, '').replace(/^\/+/, '');
-            const normalizedEvent = event.filename.replace(/^\.\//, '').replace(/^\/+/, '');
-            const selectedMatches = normalizedSelected === normalizedEvent || normalizedSelected.endsWith(`/${normalizedEvent}`);
-
-            if (selectedMatches) {
-                if (event.action === 'delete') {
-                    setSelectedFileContent('');
-                } else if (typeof event.content === 'string') {
-                    setSelectedFileContent(event.content);
-                }
-            }
-
-            await loadFiles(currentProjectId);
-        },
-        [currentProjectId, selectedFile, loadFiles]
-    );
+    const handleFilesChanged = useCallback(async () => {
+        if (!currentProjectId) return;
+        await loadFiles(currentProjectId);
+    }, [currentProjectId, loadFiles]);
 
     const handleSaveFile = useCallback(async () => {
         if (!currentProjectId || !currentFile) return;
         try {
-            await updateFile(currentFile._id, {
-                size: new TextEncoder().encode(selectedFileContent).length,
-                currentVersion: (currentFile.currentVersion || 1) + 1
-            });
-            await createUpload({
+            // Step 1: Initiate multipart upload
+            const initiated = await createUpload({ key: currentFile.key, contentType: 'text/plain' });
+            // Step 2: Upload single part (base64 encoded content)
+            const contentBytes = new TextEncoder().encode(selectedFileContent);
+            const base64 = btoa(String.fromCharCode(...contentBytes));
+            const { ETag } = await patchUpload('upload', {
                 key: currentFile.key,
-                content: selectedFileContent,
-                contentType: 'text/plain',
-                projectId: currentProjectId
+                uploadId: initiated.uploadId,
+                partNumber: 1,
+                content: base64 as unknown as Buffer,
+            });
+            // Step 3: Complete multipart upload
+            await updateUpload('upload', {
+                key: currentFile.key,
+                uploadId: initiated.uploadId,
+                parts: [{ ETag, PartNumber: 1 }],
+            });
+            await updateFile(currentFile._id, {
+                size: contentBytes.length,
+                currentVersion: (currentFile.currentVersion || 1) + 1,
             });
             toast.success(`Saved: ${currentFile.name}`);
             if (selectedFile) markClean(selectedFile);
@@ -422,7 +413,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
             await stopSession(currentSession._id);
             setIsBackendReady(false);
             toast.success('Session stopped');
-        } catch (error) {
+        } catch {
             toast.error('Failed to stop session');
         }
     }, [currentSession, stopSession]);
@@ -506,9 +497,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                             onFileSelect={handleFileSelect}
                             updatingFiles={updatingFiles}
                             currentProjectId={currentProjectId}
-                            files={files}
-                            selectedFileContent={selectedFileContent}
-                            onFileApplied={handleAIAppliedFile}
+                            onFilesChanged={handleFilesChanged}
                             snapshots={snapshots}
                             snapshotsLoading={snapshotsLoading}
                             isSnapshotCreating={isSnapshotCreating}
@@ -529,9 +518,6 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                             isRunning={isRunning}
                             isBackendReady={isBackendReady}
                             currentProjectId={currentProjectId}
-                            architecture={architecture}
-                            architectureLoading={architectureLoading}
-                            architectureError={architectureError}
                             sessionStatus={currentSession?.status ?? null}
                             sessionProxyUrl={sessionProxyUrl}
                             terminalOutput={terminalOutput}
@@ -540,7 +526,6 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                             onRunBackend={handleRunBackend}
                             onStopBackend={handleStopBackend}
                             onTerminalClose={() => setIsTerminalOpen(false)}
-                            onLoadArchitecture={() => currentProjectId && loadArchitecture(currentProjectId)}
                             onCursorPositionChange={setCursorPosition}
                             onOpenQuickOpen={() => setQuickOpenOpen(true)}
                             tabs={tabs}

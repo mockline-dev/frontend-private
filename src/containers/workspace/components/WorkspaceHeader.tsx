@@ -3,7 +3,7 @@
 import { UserMenu } from '@/components/custom/UserMenu';
 import { Button } from '@/components/ui/button';
 import type { ActiveView } from '@/types/workspace';
-import { Code2, Download, Layers, TestTube2 } from 'lucide-react';
+import { Code2, Download, TestTube2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import type { UserData } from '../../auth/types';
 
@@ -85,15 +85,6 @@ export function WorkspaceHeader({
                 >
                     <TestTube2 className="w-3.5 h-3.5" />
                     API Testing
-                </button>
-                <button
-                    onClick={() => onViewChange('architecture')}
-                    className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
-                        activeView === 'architecture' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-600 hover:text-zinc-900'
-                    }`}
-                >
-                    <Layers className="w-3.5 h-3.5" />
-                    Architecture
                 </button>
             </div>
 

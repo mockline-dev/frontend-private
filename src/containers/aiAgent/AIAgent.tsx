@@ -1,24 +1,17 @@
 'use client';
 
-import { fetchFileContent } from '@/api/files/fetchFileContent';
 import { ChatComposer } from '@/components/custom/ChatComposer';
 import { MarkdownMessage } from '@/components/custom/MarkdownMessage';
 import { Button } from '@/components/ui/button';
-import { FileUpdatePreview } from '@/containers/workspace/components/FileUpdatePreview';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAIAgent } from '@/hooks/useAIAgent';
-import { type File as FileType } from '@/services/api/files';
-import { type AIAgentStepEvent } from '@/types/feathers';
-import { Activity, Brain, CheckCircle2, Copy, Loader2, RefreshCcw, Sparkles, Wrench } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { CheckCircle2, Copy, Loader2, RefreshCcw, Sparkles, Zap } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 interface AIAgentProps {
     projectId?: string;
-    files?: FileType[];
-    selectedFile?: string;
-    selectedFileContent?: string;
-    onFileApplied?: (event: { action: 'create' | 'modify' | 'delete'; filename: string; content?: string }) => void;
+    onFilesChanged?: () => void;
 }
 
 const suggestedPrompts = [
@@ -26,151 +19,39 @@ const suggestedPrompts = [
     'Optimize my database queries',
     'Add rate limiting to endpoints',
     'Review my API structure',
-    'Add Docker configuration'
+    'Add Docker configuration',
 ];
 
-function getStepIcon(stepType: AIAgentStepEvent['type']) {
-    switch (stepType) {
-        case 'thinking':
-            return <Brain className="w-3.5 h-3.5 text-violet-600" />;
-        case 'tool_call':
-        case 'tool_result':
-            return <Wrench className="w-3.5 h-3.5 text-blue-600" />;
-        case 'status':
-        default:
-            return <Activity className="w-3.5 h-3.5 text-gray-600" />;
-    }
-}
-
-function getStepTypeLabel(stepType: AIAgentStepEvent['type']): string {
-    switch (stepType) {
-        case 'thinking':
-            return 'Thinking';
-        case 'tool_call':
-            return 'Tool Call';
-        case 'tool_result':
-            return 'Tool Result';
-        case 'status':
-        default:
-            return 'Status';
-    }
-}
-
-export function AiAgent({ projectId, files = [], selectedFile, selectedFileContent, onFileApplied }: AIAgentProps) {
-    const {
-        messages,
-        hasOlderMessages,
-        isLoadingOlderMessages,
-        input,
-        setInput,
-        isLoading,
-        isStreaming,
-        agentSteps,
-        isApplyingUpdates,
-        applyingUpdateKeys,
-        fileUpdates,
-        retryingMessageId,
-        handleSubmit,
-        retryMessage,
-        loadOlderMessages,
-        handleAcceptUpdate,
-        handleRejectUpdate,
-        handleAcceptAllUpdates,
-        stopStream
-    } = useAIAgent(projectId, files, selectedFile, selectedFileContent, onFileApplied);
+export function AiAgent({ projectId, onFilesChanged }: AIAgentProps) {
+    const { messages, hasOlderMessages, isLoadingOlderMessages, input, setInput, isLoading, isStreaming, pipelineStage, retryingMessageId, handleSubmit, retryMessage, loadOlderMessages, stopStream } =
+        useAIAgent({ ...(projectId ? { projectId } : {}), ...(onFilesChanged ? { onFilesChanged } : {}) });
 
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const previousMessageCountRef = useRef(0);
-    const [currentFileContents, setCurrentFileContents] = useState<Map<string, string>>(new Map());
-    const [showAllSteps, setShowAllSteps] = useState(false);
     const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
     const isMobile = useIsMobile();
 
+    // Auto-scroll to bottom when new messages arrive or streaming
     useEffect(() => {
         const container = messagesContainerRef.current;
         if (!container) return;
-
-        const wasNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 80;
-        const messageCountIncreased = messages.length > previousMessageCountRef.current;
-
-        if ((messageCountIncreased && wasNearBottom) || isStreaming) {
+        const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+        if (isNearBottom || isStreaming) {
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         }
-
-        previousMessageCountRef.current = messages.length;
-    }, [messages, fileUpdates, isStreaming]);
+    }, [messages.length, isStreaming]);
 
     const handleMessagesScroll = async () => {
         const container = messagesContainerRef.current;
-        if (!container) return;
-
-        if (container.scrollTop > 30 || !hasOlderMessages || isLoadingOlderMessages) return;
+        if (!container || container.scrollTop > 30 || !hasOlderMessages || isLoadingOlderMessages) return;
 
         const previousHeight = container.scrollHeight;
         const previousTop = container.scrollTop;
-
         await loadOlderMessages();
-
         requestAnimationFrame(() => {
             const nextHeight = container.scrollHeight;
             container.scrollTop = nextHeight - previousHeight + previousTop;
         });
-    };
-
-    useEffect(() => {
-        let isCancelled = false;
-
-        const loadCurrentContents = async () => {
-            const next = new Map<string, string>();
-
-            if (selectedFile && selectedFileContent !== undefined) {
-                next.set(selectedFile, selectedFileContent);
-            }
-
-            const candidates = fileUpdates.filter((update) => update.action !== 'create');
-
-            await Promise.all(
-                candidates.map(async (update) => {
-                    const matched = files.find((file) => file.name === update.filename);
-                    if (!matched) {
-                        return;
-                    }
-
-                    try {
-                        const result = await fetchFileContent({ fileId: matched._id });
-                        if (result.success) {
-                            next.set(update.filename, result.content);
-                        }
-                    } catch {
-                        // Preview should still render even if content fetch fails.
-                    }
-                })
-            );
-
-            if (!isCancelled) {
-                setCurrentFileContents(next);
-            }
-        };
-
-        loadCurrentContents();
-
-        return () => {
-            isCancelled = true;
-        };
-    }, [fileUpdates, files, selectedFile, selectedFileContent]);
-
-    const previewContents = useMemo(() => currentFileContents, [currentFileContents]);
-    const visibleSteps = useMemo(() => (showAllSteps ? agentSteps : agentSteps.slice(-3)), [agentSteps, showAllSteps]);
-    const currentStep = agentSteps[agentSteps.length - 1];
-
-    const showTypingIndicator = isLoading || isStreaming;
-
-    const stepStatusLabel = currentStep?.title || 'Thinking through your request';
-
-    const formatTime = (value?: number) => {
-        if (!value) return '';
-        return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     };
 
     const copyMessage = async (messageId: string, content: string) => {
@@ -178,12 +59,22 @@ export function AiAgent({ projectId, files = [], selectedFile, selectedFileConte
             await navigator.clipboard.writeText(content);
             setCopiedMessageId(messageId);
             toast.success('Message copied');
-            window.setTimeout(() => {
-                setCopiedMessageId((prev) => (prev === messageId ? null : prev));
-            }, 1200);
+            window.setTimeout(() => setCopiedMessageId((prev) => (prev === messageId ? null : prev)), 1200);
         } catch {
             toast.error('Failed to copy message');
         }
+    };
+
+    const formatTime = (value?: number) => {
+        if (!value) return '';
+        return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    };
+
+    const showTypingIndicator = isLoading || isStreaming;
+
+    const handleFormSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        void handleSubmit();
     };
 
     return (
@@ -198,7 +89,7 @@ export function AiAgent({ projectId, files = [], selectedFile, selectedFileConte
                 aria-label="AI assistant conversation"
             >
                 {isLoadingOlderMessages && (
-                    <div className="flex items-center justify-center py-2" role="status" aria-live="polite" aria-label="Loading older chat messages">
+                    <div className="flex items-center justify-center py-2" role="status">
                         <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
                         <span className="text-xs text-gray-500 ml-2">Loading older messages...</span>
                     </div>
@@ -280,78 +171,27 @@ export function AiAgent({ projectId, files = [], selectedFile, selectedFileConte
                                 <span className="w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:-0.2s]" />
                                 <span className="w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:-0.1s]" />
                                 <span className="w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce" />
-                                <span className="text-xs text-gray-700 ml-1">{stepStatusLabel}</span>
+                                {pipelineStage && <span className="text-xs text-gray-600 ml-1">{pipelineStage}</span>}
                             </div>
                         </div>
                     </div>
                 )}
 
-                {agentSteps.length > 0 && (
-                    <div className="border border-gray-200 rounded-xl bg-white p-3 mt-2 shadow-xs" role="status" aria-live="polite" aria-label="Agent activity timeline">
-                        <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                                {isStreaming ? <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-600" /> : <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />}
-                                <span className="text-xs font-medium text-gray-900">Agent activity</span>
-                            </div>
-                            {agentSteps.length > 3 && (
-                                <button
-                                    onClick={() => setShowAllSteps((prev) => !prev)}
-                                    className="text-[11px] text-gray-600 hover:text-gray-900 underline-offset-2 hover:underline"
-                                    type="button"
-                                    aria-expanded={showAllSteps}
-                                    aria-label={showAllSteps ? 'Show recent agent steps' : `Show all ${agentSteps.length} agent steps`}
-                                >
-                                    {showAllSteps ? 'Show recent' : `Show all (${agentSteps.length})`}
-                                </button>
-                            )}
-                        </div>
-
-                        {currentStep && (
-                            <p className="text-[11px] text-gray-600 mt-1.5">
-                                Current: <span className="text-gray-900 font-medium">{currentStep.title}</span>
-                            </p>
-                        )}
-
-                        <div className="mt-2 space-y-1.5" role="list" aria-label="Agent steps">
-                            {visibleSteps.map((step) => (
-                                <div
-                                    key={`${step.createdAt}-${step.type}-${step.title}`}
-                                    className="flex items-start gap-2 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2"
-                                    role="listitem"
-                                >
-                                    <div className="mt-0.5">{getStepIcon(step.type)}</div>
-                                    <div className="min-w-0 flex-1">
-                                        <div className="flex flex-wrap items-center gap-1.5">
-                                            <span className="text-[11px] font-medium text-gray-900">{step.title}</span>
-                                            <span className="text-[10px] text-gray-500 uppercase tracking-wide">{getStepTypeLabel(step.type)}</span>
-                                            <span className="text-[10px] text-gray-400">{formatTime(step.createdAt)}</span>
-                                        </div>
-                                        {step.detail && <p className="text-[11px] text-gray-600 mt-0.5">{step.detail}</p>}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                {pipelineStage === 'Files saved' && !isStreaming && !isLoading && (
+                    <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded-xl px-3 py-2" role="status">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Files updated — file tree refreshed</span>
                     </div>
                 )}
 
                 <div ref={messagesEndRef} />
             </div>
 
-            {fileUpdates.length > 0 && (
-                <FileUpdatePreview
-                    updates={fileUpdates}
-                    currentFiles={previewContents}
-                    applyingUpdateKeys={applyingUpdateKeys}
-                    isApplying={isApplyingUpdates}
-                    onAccept={handleAcceptUpdate}
-                    onReject={handleRejectUpdate}
-                    onAcceptAll={handleAcceptAllUpdates}
-                />
-            )}
-
             {messages.length <= 1 && (
                 <div className="px-3 pb-3 border-t pt-3 border-gray-200 bg-white">
-                    <p className="text-[10px] text-gray-500 mb-2 uppercase tracking-wide font-medium">Quick actions</p>
+                    <p className="text-[10px] text-gray-500 mb-2 uppercase tracking-wide font-medium flex items-center gap-1">
+                        <Zap className="w-3 h-3" /> Quick actions
+                    </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                         {suggestedPrompts.map((prompt, index) => (
                             <button
@@ -367,15 +207,7 @@ export function AiAgent({ projectId, files = [], selectedFile, selectedFileConte
                 </div>
             )}
 
-            <ChatComposer
-                value={input}
-                onChange={setInput}
-                onSubmit={handleSubmit}
-                isLoading={isLoading}
-                isStreaming={isStreaming}
-                onStopGenerating={stopStream}
-                placeholder="Ask Mocky..."
-            />
+            <ChatComposer value={input} onChange={setInput} onSubmit={handleFormSubmit} isLoading={isLoading} isStreaming={isStreaming} onStopGenerating={stopStream} placeholder="Ask Mocky..." />
         </div>
     );
 }

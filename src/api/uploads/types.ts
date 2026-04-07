@@ -20,6 +20,11 @@ export interface UploadUpdateData {
     content: Buffer;
 }
 
+// Response from Step 2
+export interface UploadPartResponse {
+    ETag: string;
+}
+
 // Step 3: PUT /uploads/<any> — complete multipart upload
 export interface UploadCompleteData {
     uploadId: string;

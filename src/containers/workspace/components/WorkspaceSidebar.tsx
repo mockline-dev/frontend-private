@@ -5,7 +5,6 @@ import { FileTreeHeader } from '@/components/custom/FileTreeHeader';
 import { Button } from '@/components/ui/button';
 import { AiAgent } from '@/containers/aiAgent/AIAgent';
 import type { SidebarView, FileNode } from '@/types/workspace';
-import type { File as FileType } from '@/services/api/files';
 import type { Snapshot } from '@/types/feathers';
 import { Bot, FolderTree, History, Loader2, RotateCcw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
@@ -22,9 +21,7 @@ interface WorkspaceSidebarProps {
 
     // AI agent
     currentProjectId: string | undefined;
-    files: FileType[];
-    selectedFileContent: string;
-    onFileApplied: (event: { action: 'create' | 'modify' | 'delete'; filename: string; content?: string }) => void;
+    onFilesChanged: () => void;
 
     // Versions / Snapshots
     snapshots: Snapshot[];
@@ -50,9 +47,7 @@ export function WorkspaceSidebar({
     onFileSelect,
     updatingFiles,
     currentProjectId,
-    files,
-    selectedFileContent,
-    onFileApplied,
+    onFilesChanged,
     snapshots,
     snapshotsLoading,
     isSnapshotCreating,
@@ -132,9 +127,7 @@ export function WorkspaceSidebar({
                     <AiAgent
                         {...(currentProjectId ? { projectId: currentProjectId } : {})}
                         files={files}
-                        selectedFile={selectedFile || ''}
-                        selectedFileContent={selectedFileContent}
-                        onFileApplied={onFileApplied}
+                        onFilesChanged={onFilesChanged}
                     />
                 ) : (
                     <VersionsPanel

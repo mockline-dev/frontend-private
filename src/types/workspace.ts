@@ -5,7 +5,7 @@ export interface EditorTab {
     isDirty: boolean;
 }
 
-export type ActiveView = 'code' | 'api' | 'architecture';
+export type ActiveView = 'code' | 'api';
 
 export type SidebarView = 'files' | 'ai' | 'versions';
 

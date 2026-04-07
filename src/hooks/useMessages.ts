@@ -5,7 +5,7 @@ import { deleteMessage as deleteMessageAction } from '@/api/messages/deleteMessa
 import { fetchMessageById } from '@/api/messages/fetchMessageById';
 import { fetchMessages } from '@/api/messages/fetchMessages';
 import { updateMessage as updateMessageAction } from '@/api/messages/updateMessage';
-import { ConversationHistoryItem, CreateMessageData, Message, MessageQuery, UpdateMessageData } from '@/types/feathers';
+import { CreateMessageData, Message, MessageQuery, UpdateMessageData } from '@/types/feathers';
 import { useCallback, useState } from 'react';
 import { useRealtimeUpdates } from './useRealtimeUpdates';
 
@@ -23,7 +23,6 @@ export interface UseMessagesReturn {
     updateMessage: (messageId: string, data: UpdateMessageData) => Promise<Message>;
     deleteMessage: (messageId: string) => Promise<void>;
     refresh: (projectId: string) => Promise<void>;
-    getConversationHistory: (projectId: string) => Promise<ConversationHistoryItem[]>;
     setCurrentMessage: (message: Message | null) => void;
 }
 
@@ -33,10 +32,8 @@ export function useMessages(initialMessages: Message[] = []): UseMessagesReturn 
     const [error, setError] = useState<string | null>(null);
     const [currentMessage, setCurrentMessage] = useState<Message | null>(null);
 
-    // Check if we're in a browser environment
     const isBrowser = typeof window !== 'undefined';
 
-    // Load messages for a project
     const loadMessages = useCallback(
         async (projectId: string, query?: MessageQuery) => {
             if (!isBrowser) return;
@@ -64,7 +61,6 @@ export function useMessages(initialMessages: Message[] = []): UseMessagesReturn 
         [isBrowser]
     );
 
-    // Load a single message
     const loadMessage = useCallback(
         async (messageId: string) => {
             if (!isBrowser) return;
@@ -87,7 +83,6 @@ export function useMessages(initialMessages: Message[] = []): UseMessagesReturn 
         [isBrowser]
     );
 
-    // Create a new message
     const createMessage = useCallback(
         async (data: CreateMessageData): Promise<Message> => {
             if (!isBrowser) {
@@ -113,7 +108,6 @@ export function useMessages(initialMessages: Message[] = []): UseMessagesReturn 
         [isBrowser]
     );
 
-    // Update a message
     const updateMessage = useCallback(
         async (messageId: string, data: UpdateMessageData): Promise<Message> => {
             if (!isBrowser) {
@@ -140,7 +134,6 @@ export function useMessages(initialMessages: Message[] = []): UseMessagesReturn 
         [isBrowser]
     );
 
-    // Delete a message
     const deleteMessage = useCallback(
         async (messageId: string): Promise<void> => {
             if (!isBrowser) {
@@ -166,37 +159,11 @@ export function useMessages(initialMessages: Message[] = []): UseMessagesReturn 
         [isBrowser]
     );
 
-    // Refresh messages for a project
     const refresh = useCallback(
         async (projectId: string) => {
             await loadMessages(projectId);
         },
         [loadMessages]
-    );
-
-    // Get conversation history for AI streaming
-    const getConversationHistory = useCallback(
-        async (projectId: string): Promise<ConversationHistoryItem[]> => {
-            if (!isBrowser) return [];
-
-            try {
-                const result = await fetchMessages({
-                    query: {
-                        projectId,
-                        $sort: { createdAt: 1 }
-                    }
-                });
-                const messages = Array.isArray(result) ? result : result.data || [];
-                return messages.map((m: Message) => ({
-                    role: m.role,
-                    content: m.content
-                }));
-            } catch (err) {
-                console.error('[useMessages] Error getting conversation history:', err);
-                return [];
-            }
-        },
-        [isBrowser]
     );
 
     useRealtimeUpdates<Message>('messages', 'created', (message) => {
@@ -214,20 +181,16 @@ export function useMessages(initialMessages: Message[] = []): UseMessagesReturn 
     });
 
     return {
-        // State
         messages,
         loading,
         error,
         currentMessage,
-
-        // Methods
         loadMessages,
         loadMessage,
         createMessage,
         updateMessage,
         deleteMessage,
         refresh,
-        getConversationHistory,
         setCurrentMessage
     };
 }

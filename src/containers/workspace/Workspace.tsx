@@ -622,6 +622,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                             currentProjectId={currentProjectId}
                             sessionStatus={currentSession?.status ?? null}
                             sessionId={currentSession?._id}
+                            failureType={currentSession?.failureType ?? null}
                             sessionProxyUrl={sessionProxyUrl}
                             terminalOutput={terminalOutput}
                             onContentChange={handleContentChange}
@@ -629,6 +630,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                             onRunBackend={handleRunBackend}
                             onStopBackend={handleStopBackend}
                             onTerminalClose={() => setIsTerminalOpen(false)}
+                            onTerminalRetry={handleRunBackend}
                             onCursorPositionChange={setCursorPosition}
                             onOpenQuickOpen={() => setQuickOpenOpen(true)}
                             tabs={tabs}

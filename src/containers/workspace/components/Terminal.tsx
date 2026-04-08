@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Terminal as XTerm } from '@xterm/xterm';
-import { Bug, Check, Eraser, Square, Terminal as TerminalIcon, X, Zap } from 'lucide-react';
+import { Bug, Check, Eraser, RefreshCw, Square, Terminal as TerminalIcon, X, Zap } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import '@xterm/xterm/css/xterm.css';
 import { DebugPanel } from './DebugPanel';
@@ -19,9 +19,11 @@ interface TerminalProps {
     projectId?: string | undefined;
     sessionId?: string | undefined;
     sessionStatus?: 'starting' | 'repairing' | 'running' | 'stopped' | 'error' | null | undefined;
+    failureType?: 'port_never_opened' | 'process_crashed' | 'http_not_serving' | 'timeout' | null | undefined;
     sessionOutput?: string[] | undefined;
     variant?: 'panel' | 'floating';
     onClear?: (() => void) | undefined;
+    onRetry?: (() => void) | undefined;
 }
 
 // ─── Status chip ──────────────────────────────────────────────────────────────
@@ -33,6 +35,13 @@ const STATUS_CONFIG = {
     stopped:   { label: 'Stopped',   dot: 'bg-zinc-500',                  text: 'text-zinc-400',    ring: 'ring-zinc-500/20'  },
     error:     { label: 'Error',     dot: 'bg-red-500',                   text: 'text-red-300',     ring: 'ring-red-500/20'   },
 } as const;
+
+const FAILURE_LABELS: Record<NonNullable<TerminalProps['failureType']>, string> = {
+    port_never_opened: 'Import/syntax error',
+    process_crashed:   'Crashed after startup',
+    http_not_serving:  'Port open — HTTP not responding',
+    timeout:           'Health check timed out',
+};
 
 function StatusChip({ status }: { status: NonNullable<TerminalProps['sessionStatus']> }) {
     const cfg = STATUS_CONFIG[status];
@@ -84,9 +93,11 @@ export function Terminal({
     projectId,
     sessionId,
     sessionStatus,
+    failureType,
     sessionOutput = [],
     variant = 'panel',
     onClear,
+    onRetry,
 }: TerminalProps) {
     const containerRef  = useRef<HTMLDivElement>(null);
     const xtermRef      = useRef<XTerm | null>(null);
@@ -199,6 +210,12 @@ export function Terminal({
 
                         {sessionStatus && <StatusChip status={sessionStatus} />}
 
+                        {sessionStatus === 'error' && failureType && (
+                            <span className="text-[10px] font-mono text-red-400/80">
+                                {FAILURE_LABELS[failureType]}
+                            </span>
+                        )}
+
                         {!sessionStatus && (
                             <span className="text-[10px] font-mono text-zinc-600">
                                 {projectId ? `· ${projectId.slice(0, 8)}` : '· no session'}
@@ -207,6 +224,17 @@ export function Terminal({
                     </div>
 
                     <div className="flex items-center gap-0.5">
+                        {sessionStatus === 'error' && onRetry && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                                onClick={onRetry}
+                                title="Retry — create new session"
+                            >
+                                <RefreshCw className="w-3 h-3" />
+                            </Button>
+                        )}
                         {sessionStatus === 'error' && sessionId && (
                             <Button
                                 variant="ghost"

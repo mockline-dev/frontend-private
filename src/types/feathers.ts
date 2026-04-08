@@ -276,6 +276,7 @@ export interface Session {
     startedAt?: number;
     stoppedAt?: number;
     errorMessage?: string;
+    failureType?: 'port_never_opened' | 'process_crashed' | 'http_not_serving' | 'timeout';
     serverLog?: string;
     createdAt: number;
     updatedAt: number;

@@ -22,6 +22,7 @@ interface EditorPanelProps {
     currentProjectId: string | undefined;
     sessionStatus?: 'starting' | 'repairing' | 'running' | 'stopped' | 'error' | null;
     sessionId?: string | undefined;
+    failureType?: 'port_never_opened' | 'process_crashed' | 'http_not_serving' | 'timeout' | null;
     sessionProxyUrl?: string | null;
     terminalOutput?: string[];
     onContentChange: (value: string | undefined) => void;
@@ -29,6 +30,7 @@ interface EditorPanelProps {
     onRunBackend: () => void;
     onStopBackend?: () => void;
     onTerminalClose: () => void;
+    onTerminalRetry?: () => void;
     onCursorPositionChange?: ((pos: CursorPosition) => void) | undefined;
     onOpenQuickOpen?: (() => void) | undefined;
     // Tab system
@@ -49,6 +51,7 @@ export function EditorPanel({
     currentProjectId,
     sessionStatus,
     sessionId,
+    failureType,
     sessionProxyUrl,
     terminalOutput = [],
     onContentChange,
@@ -56,6 +59,7 @@ export function EditorPanel({
     onRunBackend,
     onStopBackend,
     onTerminalClose,
+    onTerminalRetry,
     onCursorPositionChange,
     onOpenQuickOpen,
     tabs,
@@ -130,7 +134,7 @@ export function EditorPanel({
                 <>
                     <ResizableHandle className="h-1 bg-zinc-200 hover:bg-blue-400 transition-colors cursor-row-resize" />
                     <ResizablePanel minSize={15} defaultSize={30}>
-                        <Terminal variant="panel" isOpen={true} onClose={onTerminalClose} projectId={currentProjectId} sessionId={sessionId} sessionStatus={sessionStatus} sessionOutput={terminalOutput} />
+                        <Terminal variant="panel" isOpen={true} onClose={onTerminalClose} projectId={currentProjectId} sessionId={sessionId} sessionStatus={sessionStatus} failureType={failureType} sessionOutput={terminalOutput} {...(onTerminalRetry ? { onRetry: onTerminalRetry } : {})} />
                     </ResizablePanel>
                 </>
             )}

@@ -385,3 +385,22 @@ export interface IndexingErrorEvent {
     projectId: string;
     error: string;
 }
+
+// ============================================================================
+// Terminal Streaming Event Types
+// Emitted by sessions service during dep install, server start, and log tail
+// ============================================================================
+
+export type TerminalPhase = 'deps' | 'start' | 'server';
+
+/** Fired when the sandbox process writes to stdout */
+export interface TerminalStdoutEvent {
+    data: string;
+    phase: TerminalPhase;
+}
+
+/** Fired when the sandbox process writes to stderr */
+export interface TerminalStderrEvent {
+    data: string;
+    phase: TerminalPhase;
+}

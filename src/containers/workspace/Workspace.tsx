@@ -18,7 +18,7 @@ import { useProjects } from '@/hooks/useProjects';
 import { useProjectChannel, useSocketEvent } from '@/hooks/useRealtimeUpdates';
 import { useSessions } from '@/hooks/useSessions';
 import { useSnapshots } from '@/hooks/useSnapshots';
-import type { Project, ProjectFile, SandboxResultEvent } from '@/types/feathers';
+import type { Project, ProjectFile, SandboxResultEvent, TerminalStderrEvent, TerminalStdoutEvent } from '@/types/feathers';
 import type { ActiveView, CursorPosition, SidebarView } from '@/types/workspace';
 import { QuickOpen } from '@/components/custom/QuickOpen';
 import { useOpenTabs } from '@/hooks/useOpenTabs';
@@ -128,6 +128,18 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
             ...(event.compilationOutput ? event.compilationOutput.split('\n').map((l) => `  ${l}`) : []),
             ...(event.testOutput ? event.testOutput.split('\n').map((l) => `  ${l}`) : [])
         ];
+        setTerminalOutput((prev) => [...prev, ...lines]);
+    });
+
+    // Listen for real-time terminal output from backend execution phases
+    useSocketEvent<TerminalStdoutEvent>('terminal:stdout', ({ data, phase }) => {
+        const phaseColor = phase === 'deps' ? '\x1b[33m' : phase === 'start' ? '\x1b[34m' : '\x1b[0m';
+        const lines = data.split('\n').filter(Boolean).map((l) => `${phaseColor}${l}\x1b[0m`);
+        setTerminalOutput((prev) => [...prev, ...lines]);
+    });
+
+    useSocketEvent<TerminalStderrEvent>('terminal:stderr', ({ data }) => {
+        const lines = data.split('\n').filter(Boolean).map((l) => `\x1b[91m${l}\x1b[0m`);
         setTerminalOutput((prev) => [...prev, ...lines]);
     });
 

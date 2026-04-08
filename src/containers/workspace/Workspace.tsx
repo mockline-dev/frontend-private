@@ -159,8 +159,12 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         server: '\x1b[36m\x1b[1m── Server output\x1b[0m',
     };
 
-    useSocketEvent<TerminalStdoutEvent>('terminal:stdout', ({ text, phase }) => {
-        const raw = text ?? '';
+    useSocketEvent<TerminalStdoutEvent>('terminal:stdout', (event) => {
+        if (!event) return;
+        // Support new format { text, phase } and old format { data, phase }
+        const raw: string = event.text ?? (event as any).data ?? '';
+        const phase = event.phase;
+        if (!phase) return;
         const lines: string[] = [];
         if (phase !== lastPhaseRef.current) {
             lastPhaseRef.current = phase;
@@ -171,13 +175,15 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         setTerminalOutput((prev) => [...prev, ...lines, ...rawLines]);
     });
 
-    useSocketEvent<TerminalStderrEvent>('terminal:stderr', ({ text, phase }) => {
-        const raw = text ?? '';
+    useSocketEvent<TerminalStderrEvent>('terminal:stderr', (event) => {
+        if (!event) return;
+        const raw: string = event.text ?? (event as any).data ?? '';
+        const phase = event.phase;
         if (raw.includes('Missing modules (not installed):')) {
             toast.error(raw.trim(), { duration: 8000 });
         }
         const lines: string[] = [];
-        if (phase !== lastPhaseRef.current) {
+        if (phase && phase !== lastPhaseRef.current) {
             lastPhaseRef.current = phase;
             lines.push(PHASE_HEADERS[phase]);
         }

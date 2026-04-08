@@ -79,7 +79,7 @@ export interface CreateProjectData {
     description: string;
     framework: 'fast-api' | 'feathers';
     language: 'python' | 'typescript';
-    model: string;
+    model?: string;
     status: 'initializing' | 'generating' | 'validating' | 'ready' | 'running' | 'error';
     jobId?: string;
     architectureId?: string;

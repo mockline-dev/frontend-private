@@ -65,7 +65,7 @@ function CodeBlock({ language, children }: { language: string; children: React.R
             </div>
             <div className="bg-zinc-900 overflow-x-auto">
                 <pre className="p-3 text-xs leading-relaxed">
-                    <code className={language ? `language-${language}` : ''}>{children}</code>
+                    <code className={`text-zinc-100 ${language ? `language-${language}` : ''}`}>{children}</code>
                 </pre>
             </div>
         </div>

@@ -2,7 +2,6 @@
 
 import { createMessage } from '@/api/messages/createMessage';
 import { appRoutes } from '@/config/appRoutes';
-import { defaultAiModel } from '@/config/environment';
 import { UserData } from '@/containers/auth/types';
 import { useProjectCreation } from '@/hooks/useProjectCreation';
 import { useRouter } from 'next/navigation';
@@ -64,7 +63,6 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
                     description: normalizedPrompt,
                     framework: 'fast-api',
                     language: 'python',
-                    model: defaultAiModel,
                     status: 'initializing'
                 });
 

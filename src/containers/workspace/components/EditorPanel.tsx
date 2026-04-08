@@ -118,7 +118,6 @@ export function EditorPanel({
                         <ApiClient
                             sessionProxyUrl={sessionProxyUrl ?? null}
                             isSessionRunning={isBackendReady}
-                            isActive={true}
                             {...(currentProjectId ? { projectId: currentProjectId } : {})}
                             onRunBackend={onRunBackend}
                             isRunning={isRunning}

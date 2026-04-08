@@ -7,7 +7,6 @@ import { patchUpload } from '@/api/uploads/patchUpload';
 import { updateUpload } from '@/api/uploads/updateUpload';
 import { ProjectCreationLoader } from '@/components/custom/ProjectCreationLoader';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
-import { defaultAiModel } from '@/config/environment';
 import { EditorPanel } from '@/containers/workspace/components/EditorPanel';
 import { WorkspaceHeader } from '@/containers/workspace/components/WorkspaceHeader';
 import { WorkspaceSidebar } from '@/containers/workspace/components/WorkspaceSidebar';
@@ -161,7 +160,6 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                     description: prompt,
                     framework: 'fast-api',
                     language: 'python',
-                    model: defaultAiModel,
                     status: 'initializing'
                 });
             } catch (error) {

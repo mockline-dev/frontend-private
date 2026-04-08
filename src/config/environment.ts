@@ -6,19 +6,18 @@ interface EnvironmentConfig {
   // API URLs
   aiServiceUrl: string
   backendUrl: string
-  
+
   // Feature flags
   enableDebugMode: boolean
   enableMockData: boolean
-  
+
   // AI Configuration
-  defaultAiModel: string
   streamingEnabled: boolean
-  
+
   // File handling
   maxFileSize: number
   supportedFileTypes: string[]
-  
+
   // UI Configuration
   defaultTheme: 'light' | 'dark'
   animationsEnabled: boolean
@@ -28,15 +27,14 @@ const config: EnvironmentConfig = {
   // API URLs - use environment variables with fallbacks
   aiServiceUrl: process.env.NEXT_PUBLIC_AI_SERVICE_URL || 'http://localhost:8000',
   backendUrl: process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3030',
-  
+
   // Feature flags
   enableDebugMode: process.env.NODE_ENV === 'development',
   enableMockData: process.env.NEXT_PUBLIC_ENABLE_MOCK_DATA === 'true',
-  
+
   // AI Configuration
-  defaultAiModel: process.env.NEXT_PUBLIC_DEFAULT_AI_MODEL || 'qwen2.5-coder:7b',
   streamingEnabled: process.env.NEXT_PUBLIC_STREAMING_ENABLED !== 'false',
-  
+
   // File handling
   maxFileSize: parseInt(process.env.NEXT_PUBLIC_MAX_FILE_SIZE || '10485760'), // 10MB default
   supportedFileTypes: [
@@ -76,7 +74,6 @@ export const {
   backendUrl,
   enableDebugMode,
   enableMockData,
-  defaultAiModel,
   streamingEnabled,
   maxFileSize,
   supportedFileTypes,

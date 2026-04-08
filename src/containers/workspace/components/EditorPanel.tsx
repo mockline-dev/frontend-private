@@ -4,7 +4,7 @@ import { EditorTabs } from '@/components/custom/EditorTabs';
 import { MonacoEditor } from '@/components/custom/MonacoEditor';
 import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
-import { ApiClient } from '@/containers/workspace/components/ApiClient';
+import { ApiTester } from '@/containers/workspace/components/ApiTester';
 import { Breadcrumbs } from '@/containers/workspace/components/Breadcrumbs';
 import { Terminal } from '@/containers/workspace/components/Terminal';
 import type { ActiveView, CursorPosition, EditorTab } from '@/types/workspace';
@@ -115,10 +115,9 @@ export function EditorPanel({
                             </div>
                         </>
                     ) : (
-                        <ApiClient
+                        <ApiTester
                             sessionProxyUrl={sessionProxyUrl ?? null}
                             isSessionRunning={isBackendReady}
-                            {...(currentProjectId ? { projectId: currentProjectId } : {})}
                             onRunBackend={onRunBackend}
                             isRunning={isRunning}
                         />

@@ -133,13 +133,18 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
 
     // Listen for real-time terminal output from backend execution phases
     useSocketEvent<TerminalStdoutEvent>('terminal:stdout', ({ data, phase }) => {
-        const phaseColor = phase === 'deps' ? '\x1b[33m' : phase === 'start' ? '\x1b[34m' : '\x1b[0m';
-        const lines = data.split('\n').filter(Boolean).map((l) => `${phaseColor}${l}\x1b[0m`);
+        const raw = typeof data === 'string' ? data : ((data as any)?.text ?? '');
+        const phaseColor = phase === 'deps' ? '\x1b[33m' : phase === 'start' ? '\x1b[34m' : '\x1b[36m';
+        const lines = raw.split('\n').filter(Boolean).map((l) => `${phaseColor}${l}\x1b[0m`);
         setTerminalOutput((prev) => [...prev, ...lines]);
     });
 
     useSocketEvent<TerminalStderrEvent>('terminal:stderr', ({ data }) => {
-        const lines = data.split('\n').filter(Boolean).map((l) => `\x1b[91m${l}\x1b[0m`);
+        const raw = typeof data === 'string' ? data : ((data as any)?.text ?? '');
+        if (raw.includes('Missing modules (not installed):')) {
+            toast.error(raw.trim(), { duration: 8000 });
+        }
+        const lines = raw.split('\n').filter(Boolean).map((l) => `\x1b[91m${l}\x1b[0m`);
         setTerminalOutput((prev) => [...prev, ...lines]);
     });
 

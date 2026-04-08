@@ -276,6 +276,7 @@ export interface Session {
     startedAt?: number;
     stoppedAt?: number;
     errorMessage?: string;
+    serverLog?: string;
     createdAt: number;
     updatedAt: number;
 }
@@ -395,12 +396,16 @@ export type TerminalPhase = 'deps' | 'start' | 'server';
 
 /** Fired when the sandbox process writes to stdout */
 export interface TerminalStdoutEvent {
-    data: string;
+    projectId?: string;
+    sessionId?: string;
     phase: TerminalPhase;
+    text: string;
 }
 
 /** Fired when the sandbox process writes to stderr */
 export interface TerminalStderrEvent {
-    data: string;
+    projectId?: string;
+    sessionId?: string;
     phase: TerminalPhase;
+    text: string;
 }

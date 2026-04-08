@@ -18,7 +18,7 @@ import { useProjects } from '@/hooks/useProjects';
 import { useProjectChannel, useSocketEvent } from '@/hooks/useRealtimeUpdates';
 import { useSessions } from '@/hooks/useSessions';
 import { useSnapshots } from '@/hooks/useSnapshots';
-import type { Project, ProjectFile, SandboxResultEvent, TerminalStderrEvent, TerminalStdoutEvent } from '@/types/feathers';
+import type { Project, ProjectFile, SandboxResultEvent, TerminalPhase, TerminalStderrEvent, TerminalStdoutEvent } from '@/types/feathers';
 import type { ActiveView, CursorPosition, SidebarView } from '@/types/workspace';
 import { QuickOpen } from '@/components/custom/QuickOpen';
 import { useOpenTabs } from '@/hooks/useOpenTabs';
@@ -64,6 +64,8 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     const { tabs, activeTabId, openTab, closeTab, setActiveTab, markDirty, markClean, hasUnsavedChanges } = useOpenTabs();
 
     const creationTriggeredRef = useRef(false);
+    const lastPhaseRef = useRef<TerminalPhase | null>(null);
+    const errorWrittenRef = useRef<string | null>(null); // session _id for which error was written
 
     const {
         state: creationState,
@@ -98,6 +100,8 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         setIsBackendReady(false);
         setTerminalOutput([]);
         setActiveView((v) => v === 'api' ? 'code' : v);
+        lastPhaseRef.current = null;
+        errorWrittenRef.current = null;
     }, [currentProjectId]);
 
     useEffect(() => {
@@ -110,13 +114,30 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         if (isSessionRunning) {
             setIsRunning(false);
             setIsTerminalOpen(true);
+            errorWrittenRef.current = null;
             toast.success('Backend session started');
         }
-        if (currentSession?.status === 'error') {
+        if (currentSession?.status === 'error' && errorWrittenRef.current !== currentSession._id) {
+            errorWrittenRef.current = currentSession._id;
             setIsRunning(false);
             toast.error(currentSession.errorMessage || 'Session failed to start');
+            // Write structured error details to terminal
+            const details: string[] = [];
+            if (currentSession.errorMessage) {
+                details.push(`\x1b[91m\x1b[1m✖ ${currentSession.errorMessage}\x1b[0m`);
+            }
+            if (currentSession.serverLog?.trim()) {
+                details.push(`\x1b[90m${'─'.repeat(50)}\x1b[0m`);
+                details.push(`\x1b[90m\x1b[1m── Server Log\x1b[0m`);
+                for (const line of currentSession.serverLog.split('\n')) {
+                    if (line.trim()) details.push(`\x1b[31m${line}\x1b[0m`);
+                }
+            }
+            if (details.length > 0) {
+                setTerminalOutput((prev) => [...prev, ...details]);
+            }
         }
-    }, [isSessionRunning, currentSession?.status, currentSession?.errorMessage]);
+    }, [isSessionRunning, currentSession?.status, currentSession?.errorMessage, currentSession?._id, currentSession?.serverLog]);
 
     // Listen for sandbox results to display in terminal
     useSocketEvent<SandboxResultEvent>('sandbox:result', (event) => {
@@ -132,20 +153,36 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     });
 
     // Listen for real-time terminal output from backend execution phases
-    useSocketEvent<TerminalStdoutEvent>('terminal:stdout', ({ data, phase }) => {
-        const raw = typeof data === 'string' ? data : ((data as any)?.text ?? '');
+    const PHASE_HEADERS: Record<TerminalPhase, string> = {
+        deps:   '\x1b[90m\x1b[1m── Installing dependencies…\x1b[0m',
+        start:  '\x1b[34m\x1b[1m── Starting server…\x1b[0m',
+        server: '\x1b[36m\x1b[1m── Server output\x1b[0m',
+    };
+
+    useSocketEvent<TerminalStdoutEvent>('terminal:stdout', ({ text, phase }) => {
+        const raw = text ?? '';
+        const lines: string[] = [];
+        if (phase !== lastPhaseRef.current) {
+            lastPhaseRef.current = phase;
+            lines.push(PHASE_HEADERS[phase]);
+        }
         const phaseColor = phase === 'deps' ? '\x1b[33m' : phase === 'start' ? '\x1b[34m' : '\x1b[36m';
-        const lines = raw.split('\n').filter(Boolean).map((l) => `${phaseColor}${l}\x1b[0m`);
-        setTerminalOutput((prev) => [...prev, ...lines]);
+        const rawLines = raw.split('\n').filter(Boolean).map((l) => `${phaseColor}${l}\x1b[0m`);
+        setTerminalOutput((prev) => [...prev, ...lines, ...rawLines]);
     });
 
-    useSocketEvent<TerminalStderrEvent>('terminal:stderr', ({ data }) => {
-        const raw = typeof data === 'string' ? data : ((data as any)?.text ?? '');
+    useSocketEvent<TerminalStderrEvent>('terminal:stderr', ({ text, phase }) => {
+        const raw = text ?? '';
         if (raw.includes('Missing modules (not installed):')) {
             toast.error(raw.trim(), { duration: 8000 });
         }
-        const lines = raw.split('\n').filter(Boolean).map((l) => `\x1b[91m${l}\x1b[0m`);
-        setTerminalOutput((prev) => [...prev, ...lines]);
+        const lines: string[] = [];
+        if (phase !== lastPhaseRef.current) {
+            lastPhaseRef.current = phase;
+            lines.push(PHASE_HEADERS[phase]);
+        }
+        const rawLines = raw.split('\n').filter(Boolean).map((l) => `\x1b[91m${l}\x1b[0m`);
+        setTerminalOutput((prev) => [...prev, ...lines, ...rawLines]);
     });
 
     useEffect(() => {
@@ -400,6 +437,8 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
 
         setIsRunning(true);
         setIsTerminalOpen(true);
+        lastPhaseRef.current = null;
+        errorWrittenRef.current = null;
 
         try {
             if (currentSession?.status === 'running') {

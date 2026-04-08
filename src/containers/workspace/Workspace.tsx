@@ -66,6 +66,8 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     const creationTriggeredRef = useRef(false);
     const lastPhaseRef = useRef<TerminalPhase | null>(null);
     const errorWrittenRef = useRef<string | null>(null); // session _id for which error was written
+    const repairWrittenRef = useRef<string | null>(null); // session _id+status key for which repairing msg was written
+    const currentSessionRef = useRef<typeof currentSession>(null);
 
     const {
         state: creationState,
@@ -89,6 +91,8 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     const { files, loadFiles, updateFile, currentFile, setCurrentFile } = useFiles(initialFiles);
     const { snapshots, loading: snapshotsLoading, createSnapshot, rollbackToSnapshot, deleteSnapshot, refresh: refreshSnapshots } = useSnapshots([]);
     const { currentSession, isSessionRunning, sessionProxyUrl, createSession, stopSession, loadSessions } = useSessions();
+
+    useEffect(() => { currentSessionRef.current = currentSession; }, [currentSession]);
 
     useProjectChannel(currentProjectId || null);
 
@@ -115,7 +119,16 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
             setIsRunning(false);
             setIsTerminalOpen(true);
             errorWrittenRef.current = null;
+            repairWrittenRef.current = null;
             toast.success('Backend session started');
+        }
+        if (currentSession?.status === 'repairing') {
+            const repairKey = `${currentSession._id}:repairing`;
+            if (repairWrittenRef.current !== repairKey) {
+                repairWrittenRef.current = repairKey;
+                const msg = currentSession.errorMessage ?? 'Auto-repair in progress…';
+                setTerminalOutput((prev) => [...prev, `\x1b[33m\x1b[1m⟳ REPAIRING\x1b[0m  ${msg}`]);
+            }
         }
         if (currentSession?.status === 'error' && errorWrittenRef.current !== currentSession._id) {
             errorWrittenRef.current = currentSession._id;
@@ -154,13 +167,14 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
 
     // Listen for real-time terminal output from backend execution phases
     const PHASE_HEADERS: Record<TerminalPhase, string> = {
-        deps:   '\x1b[90m\x1b[1m── Installing dependencies…\x1b[0m',
-        start:  '\x1b[34m\x1b[1m── Starting server…\x1b[0m',
-        server: '\x1b[36m\x1b[1m── Server output\x1b[0m',
+        deps:   '\x1b[33m\x1b[1m── Installing dependencies…\x1b[0m',
+        start:  '\x1b[36m\x1b[1m── Starting server…\x1b[0m',
+        server: '\x1b[97m\x1b[1m── Server output\x1b[0m',
+        repair: '\x1b[33m\x1b[1m── Auto-repair\x1b[0m',
     };
 
     useSocketEvent<TerminalStdoutEvent>('terminal:stdout', (event) => {
-        if (!event) return;
+        if (!event || !currentSessionRef.current || event.sessionId !== currentSessionRef.current._id) return;
         // Support new format { text, phase } and old format { data, phase }
         const raw: string = event.text ?? (event as any).data ?? '';
         const phase = event.phase;
@@ -170,13 +184,16 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
             lastPhaseRef.current = phase;
             lines.push(PHASE_HEADERS[phase]);
         }
-        const phaseColor = phase === 'deps' ? '\x1b[33m' : phase === 'start' ? '\x1b[34m' : '\x1b[36m';
-        const rawLines = raw.split('\n').filter(Boolean).map((l) => `${phaseColor}${l}\x1b[0m`);
+        const shouldApplyPhaseColor = phase !== 'repair' && phase !== 'server';
+        const phaseColor = phase === 'deps' ? '\x1b[33m' : phase === 'start' ? '\x1b[36m' : '\x1b[97m';
+        const rawLines = raw.split('\n').filter(Boolean).map((l) =>
+            shouldApplyPhaseColor ? `${phaseColor}${l}\x1b[0m` : l
+        );
         setTerminalOutput((prev) => [...prev, ...lines, ...rawLines]);
     });
 
     useSocketEvent<TerminalStderrEvent>('terminal:stderr', (event) => {
-        if (!event) return;
+        if (!event || !currentSessionRef.current || event.sessionId !== currentSessionRef.current._id) return;
         const raw: string = event.text ?? (event as any).data ?? '';
         const phase = event.phase;
         if (raw.includes('Missing modules (not installed):')) {
@@ -604,6 +621,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                             isBackendReady={isBackendReady}
                             currentProjectId={currentProjectId}
                             sessionStatus={currentSession?.status ?? null}
+                            sessionId={currentSession?._id}
                             sessionProxyUrl={sessionProxyUrl}
                             terminalOutput={terminalOutput}
                             onContentChange={handleContentChange}

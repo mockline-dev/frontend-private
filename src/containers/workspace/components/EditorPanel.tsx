@@ -20,7 +20,8 @@ interface EditorPanelProps {
     isRunning: boolean;
     isBackendReady: boolean;
     currentProjectId: string | undefined;
-    sessionStatus?: 'starting' | 'running' | 'stopped' | 'error' | null;
+    sessionStatus?: 'starting' | 'repairing' | 'running' | 'stopped' | 'error' | null;
+    sessionId?: string | undefined;
     sessionProxyUrl?: string | null;
     terminalOutput?: string[];
     onContentChange: (value: string | undefined) => void;
@@ -47,6 +48,7 @@ export function EditorPanel({
     isBackendReady,
     currentProjectId,
     sessionStatus,
+    sessionId,
     sessionProxyUrl,
     terminalOutput = [],
     onContentChange,
@@ -128,7 +130,7 @@ export function EditorPanel({
                 <>
                     <ResizableHandle className="h-1 bg-zinc-200 hover:bg-blue-400 transition-colors cursor-row-resize" />
                     <ResizablePanel minSize={15} defaultSize={30}>
-                        <Terminal variant="panel" isOpen={true} onClose={onTerminalClose} projectId={currentProjectId} sessionStatus={sessionStatus} sessionOutput={terminalOutput} />
+                        <Terminal variant="panel" isOpen={true} onClose={onTerminalClose} projectId={currentProjectId} sessionId={sessionId} sessionStatus={sessionStatus} sessionOutput={terminalOutput} />
                     </ResizablePanel>
                 </>
             )}

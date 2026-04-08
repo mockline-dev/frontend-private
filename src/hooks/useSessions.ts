@@ -41,7 +41,7 @@ export function useSessions(): UseSessionsReturn {
                 const data = Array.isArray(result) ? result : result.data || [];
                 setSessions(data);
                 // Set the most recent running/starting session as current
-                const active = data.find((s) => s.status === 'running' || s.status === 'starting');
+                const active = data.find((s) => ['running', 'starting', 'repairing'].includes(s.status));
                 if (active) setCurrentSession(active);
             } catch (err) {
                 const message = err instanceof Error ? err.message : 'Failed to load sessions';

@@ -268,7 +268,7 @@ export interface Session {
     _id: string;
     projectId: string;
     userId: string;
-    status: 'starting' | 'running' | 'stopped' | 'error';
+    status: 'starting' | 'repairing' | 'running' | 'stopped' | 'error';
     containerId?: string;
     proxyUrl?: string;
     port?: number;
@@ -392,7 +392,7 @@ export interface IndexingErrorEvent {
 // Emitted by sessions service during dep install, server start, and log tail
 // ============================================================================
 
-export type TerminalPhase = 'deps' | 'start' | 'server';
+export type TerminalPhase = 'deps' | 'start' | 'server' | 'repair';
 
 /** Fired when the sandbox process writes to stdout */
 export interface TerminalStdoutEvent {

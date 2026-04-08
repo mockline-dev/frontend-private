@@ -5,9 +5,11 @@ import { cn } from '@/lib/utils';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Terminal as XTerm } from '@xterm/xterm';
-import { Eraser, Square, Terminal as TerminalIcon, X, Zap } from 'lucide-react';
-import { useCallback, useEffect, useRef } from 'react';
+import { Bug, Check, Eraser, Square, Terminal as TerminalIcon, X, Zap } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import '@xterm/xterm/css/xterm.css';
+import { DebugPanel } from './DebugPanel';
+import { backendUrl } from '@/config/environment';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -15,7 +17,8 @@ interface TerminalProps {
     isOpen: boolean;
     onClose: () => void;
     projectId?: string | undefined;
-    sessionStatus?: 'starting' | 'running' | 'stopped' | 'error' | null | undefined;
+    sessionId?: string | undefined;
+    sessionStatus?: 'starting' | 'repairing' | 'running' | 'stopped' | 'error' | null | undefined;
     sessionOutput?: string[] | undefined;
     variant?: 'panel' | 'floating';
     onClear?: (() => void) | undefined;
@@ -24,17 +27,23 @@ interface TerminalProps {
 // ─── Status chip ──────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG = {
-    starting: { label: 'Starting',  dot: 'bg-amber-400 animate-pulse',  text: 'text-amber-300',  ring: 'ring-amber-500/20' },
-    running:  { label: 'Running',   dot: 'bg-emerald-400 animate-pulse', text: 'text-emerald-300', ring: 'ring-emerald-500/20' },
-    stopped:  { label: 'Stopped',   dot: 'bg-zinc-500',                 text: 'text-zinc-400',   ring: 'ring-zinc-500/20' },
-    error:    { label: 'Error',     dot: 'bg-red-500 animate-pulse',    text: 'text-red-300',    ring: 'ring-red-500/20' },
+    starting:  { label: 'Starting',  dot: 'bg-amber-400 animate-pulse',  text: 'text-amber-300',   ring: 'ring-amber-500/20' },
+    repairing: { label: 'Repairing', dot: 'bg-amber-500 animate-spin',   text: 'text-amber-300',   ring: 'ring-amber-500/20' },
+    running:   { label: 'Running',   dot: 'bg-emerald-400',               text: 'text-emerald-300', ring: 'ring-emerald-500/20' },
+    stopped:   { label: 'Stopped',   dot: 'bg-zinc-500',                  text: 'text-zinc-400',    ring: 'ring-zinc-500/20'  },
+    error:     { label: 'Error',     dot: 'bg-red-500',                   text: 'text-red-300',     ring: 'ring-red-500/20'   },
 } as const;
 
 function StatusChip({ status }: { status: NonNullable<TerminalProps['sessionStatus']> }) {
     const cfg = STATUS_CONFIG[status];
+    const icon = status === 'running'
+        ? <Check className="w-2.5 h-2.5" />
+        : status === 'error'
+        ? <X className="w-2.5 h-2.5" />
+        : <span className={cn('w-1.5 h-1.5 rounded-full', cfg.dot)} />;
     return (
         <span className={cn('inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-semibold ring-1 bg-zinc-900', cfg.text, cfg.ring)}>
-            <span className={cn('w-1.5 h-1.5 rounded-full', cfg.dot)} />
+            {icon}
             {cfg.label}
         </span>
     );
@@ -73,6 +82,7 @@ export function Terminal({
     isOpen,
     onClose,
     projectId,
+    sessionId,
     sessionStatus,
     sessionOutput = [],
     variant = 'panel',
@@ -83,6 +93,7 @@ export function Terminal({
     const fitAddonRef   = useRef<FitAddon | null>(null);
     const initializedRef = useRef(false);
     const lastOutputLen = useRef(0);
+    const [debugMode, setDebugMode] = useState(false);
 
     // ── Init xterm on mount ──────────────────────────────────────────────────
     useEffect(() => {
@@ -162,10 +173,11 @@ export function Terminal({
         const ts  = new Date().toLocaleTimeString('en-US', { hour12: false });
         const tsFmt = `\x1b[90m[${ts}]\x1b[0m `;
         const msgs: Record<string, string> = {
-            starting: `${tsFmt}\x1b[33m\x1b[1m◉ STARTING\x1b[0m  Initialising sandbox container…\r\n`,
-            running:  `${tsFmt}\x1b[92m\x1b[1m◉ RUNNING\x1b[0m   Server ready — accepting connections.\r\n`,
-            stopped:  `${tsFmt}\x1b[90m\x1b[1m◎ STOPPED\x1b[0m   Session terminated.\r\n`,
-            error:    `${tsFmt}\x1b[91m\x1b[1m◉ ERROR\x1b[0m     Session encountered a fatal error.\r\n`,
+            starting:  `${tsFmt}\x1b[33m\x1b[1m◉ STARTING\x1b[0m   Initialising sandbox container…\r\n`,
+            repairing: `${tsFmt}\x1b[33m\x1b[1m⟳ REPAIRING\x1b[0m  Auto-repair in progress…\r\n`,
+            running:   `${tsFmt}\x1b[92m\x1b[1m◉ RUNNING\x1b[0m    Server ready — accepting connections.\r\n`,
+            stopped:   `${tsFmt}\x1b[90m\x1b[1m◎ STOPPED\x1b[0m    Session terminated.\r\n`,
+            error:     `${tsFmt}\x1b[91m\x1b[1m◉ ERROR\x1b[0m      Session encountered a fatal error.\r\n`,
         };
         if (msgs[sessionStatus]) term.write(msgs[sessionStatus]);
     }, [sessionStatus]);
@@ -195,6 +207,17 @@ export function Terminal({
                     </div>
 
                     <div className="flex items-center gap-0.5">
+                        {sessionStatus === 'error' && sessionId && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-red-400 hover:text-red-200 hover:bg-zinc-800"
+                                onClick={() => setDebugMode((v) => !v)}
+                                title="Debug session"
+                            >
+                                <Bug className="w-3 h-3" />
+                            </Button>
+                        )}
                         <Button
                             variant="ghost"
                             size="icon"
@@ -216,12 +239,20 @@ export function Terminal({
                     </div>
                 </div>
 
-                {/* xterm container */}
-                <div
-                    ref={containerRef}
-                    className="flex-1 overflow-hidden"
-                    style={{ padding: '6px 8px' }}
-                />
+                {/* Debug panel or xterm container */}
+                {debugMode && sessionId ? (
+                    <DebugPanel
+                        sessionId={sessionId}
+                        backendUrl={backendUrl}
+                        onClose={() => setDebugMode(false)}
+                    />
+                ) : (
+                    <div
+                        ref={containerRef}
+                        className="flex-1 overflow-hidden"
+                        style={{ padding: '6px 8px' }}
+                    />
+                )}
             </div>
         );
     }

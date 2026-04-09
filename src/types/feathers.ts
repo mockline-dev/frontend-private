@@ -271,6 +271,7 @@ export interface Session {
     status: 'starting' | 'repairing' | 'running' | 'stopped' | 'error';
     containerId?: string;
     proxyUrl?: string;
+    endpointHeaders?: Record<string, string>;
     port?: number;
     language: 'python' | 'typescript';
     startedAt?: number;

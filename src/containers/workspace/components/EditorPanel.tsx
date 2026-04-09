@@ -24,6 +24,7 @@ interface EditorPanelProps {
     sessionId?: string | undefined;
     failureType?: 'port_never_opened' | 'process_crashed' | 'http_not_serving' | 'timeout' | null;
     sessionProxyUrl?: string | null;
+    sessionEndpointHeaders?: Record<string, string> | null;
     terminalOutput?: string[];
     onContentChange: (value: string | undefined) => void;
     onSaveFile: () => void;
@@ -53,6 +54,7 @@ export function EditorPanel({
     sessionId,
     failureType,
     sessionProxyUrl,
+    sessionEndpointHeaders,
     terminalOutput = [],
     onContentChange,
     onSaveFile,
@@ -123,6 +125,7 @@ export function EditorPanel({
                     ) : (
                         <ApiTester
                             sessionProxyUrl={sessionProxyUrl ?? null}
+                            sessionEndpointHeaders={sessionEndpointHeaders ?? null}
                             isSessionRunning={isBackendReady}
                             onRunBackend={onRunBackend}
                             isRunning={isRunning}

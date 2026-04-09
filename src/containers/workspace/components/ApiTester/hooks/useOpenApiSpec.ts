@@ -15,7 +15,7 @@ interface UseOpenApiSpecResult {
     refetch: () => void;
 }
 
-export function useOpenApiSpec(specUrl: string | undefined): UseOpenApiSpecResult {
+export function useOpenApiSpec(specUrl: string | undefined, endpointHeaders?: Record<string, string> | null): UseOpenApiSpecResult {
     const [groups, setGroups] = useState<EndpointGroup[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -43,7 +43,10 @@ export function useOpenApiSpec(specUrl: string | undefined): UseOpenApiSpecResul
         const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
         try {
-            const res = await fetch(specUrl, { signal: controller.signal });
+            const res = await fetch(specUrl, {
+                signal: controller.signal,
+                ...(endpointHeaders && Object.keys(endpointHeaders).length > 0 ? { headers: endpointHeaders } : {}),
+            });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const spec = await res.json();
             setGroups(parseOpenApiSpec(spec));
@@ -63,7 +66,7 @@ export function useOpenApiSpec(specUrl: string | undefined): UseOpenApiSpecResul
         } finally {
             clearTimeout(timeout);
         }
-    }, [specUrl]);
+    }, [specUrl, endpointHeaders]);
 
     useEffect(() => {
         void fetchSpec();

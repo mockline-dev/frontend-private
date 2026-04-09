@@ -17,7 +17,7 @@ interface UseApiRequestResult {
     clearResponse: () => void;
 }
 
-export function useApiRequest(): UseApiRequestResult {
+export function useApiRequest(endpointHeaders?: Record<string, string> | null): UseApiRequestResult {
     const [response, setResponse] = useState<ApiResponse | null>(null);
     const [status, setStatus] = useState<RequestStatus>('idle');
     const [error, setError] = useState<string | null>(null);
@@ -42,7 +42,7 @@ export function useApiRequest(): UseApiRequestResult {
         const attempt = async () => {
             const startTime = Date.now();
             try {
-                const { url, init } = buildRequest(state);
+                const { url, init } = buildRequest(state, endpointHeaders);
                 const res = await fetch(url, { ...init, signal: controller.signal });
                 const parsed = await parseResponse(res, startTime);
 

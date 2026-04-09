@@ -14,6 +14,7 @@ export interface UseSessionsReturn {
     error: string | null;
     isSessionRunning: boolean;
     sessionProxyUrl: string | null;
+    sessionEndpointHeaders: Record<string, string> | null;
 
     createSession: (data: CreateSessionData) => Promise<Session>;
     stopSession: (sessionId: string) => Promise<void>;
@@ -117,6 +118,7 @@ export function useSessions(): UseSessionsReturn {
 
     const isSessionRunning = currentSession?.status === 'running';
     const sessionProxyUrl = currentSession?.proxyUrl ?? null;
+    const sessionEndpointHeaders = currentSession?.endpointHeaders ?? null;
 
     return {
         sessions,
@@ -125,6 +127,7 @@ export function useSessions(): UseSessionsReturn {
         error,
         isSessionRunning,
         sessionProxyUrl,
+        sessionEndpointHeaders,
         createSession,
         stopSession,
         loadSessions,

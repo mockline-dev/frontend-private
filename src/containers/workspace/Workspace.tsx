@@ -90,7 +90,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     const { currentProject, loadProject } = useProjects(initialProject ? [initialProject] : []);
     const { files, loadFiles, updateFile, currentFile, setCurrentFile } = useFiles(initialFiles);
     const { snapshots, loading: snapshotsLoading, createSnapshot, rollbackToSnapshot, deleteSnapshot, refresh: refreshSnapshots } = useSnapshots([]);
-    const { currentSession, isSessionRunning, sessionProxyUrl, createSession, stopSession, loadSessions } = useSessions();
+    const { currentSession, isSessionRunning, sessionProxyUrl, sessionEndpointHeaders, createSession, stopSession, loadSessions } = useSessions();
 
     useEffect(() => { currentSessionRef.current = currentSession; }, [currentSession]);
 
@@ -624,6 +624,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                             sessionId={currentSession?._id}
                             failureType={currentSession?.failureType ?? null}
                             sessionProxyUrl={sessionProxyUrl}
+                            sessionEndpointHeaders={sessionEndpointHeaders}
                             terminalOutput={terminalOutput}
                             onContentChange={handleContentChange}
                             onSaveFile={handleSaveFile}

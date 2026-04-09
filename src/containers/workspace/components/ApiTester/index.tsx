@@ -14,11 +14,11 @@ import { useOpenApiSpec } from './hooks/useOpenApiSpec';
 import { useRequestCollection } from './hooks/useRequestCollection';
 import type { ApiTesterProps } from './types';
 
-export function ApiTester({ sessionProxyUrl, isSessionRunning, onRunBackend, isRunning }: ApiTesterProps) {
+export function ApiTester({ sessionProxyUrl, sessionEndpointHeaders, isSessionRunning, onRunBackend, isRunning }: ApiTesterProps) {
     const specUrl = sessionProxyUrl ? `${sessionProxyUrl}/openapi.json` : undefined;
     const baseUrl = sessionProxyUrl ?? '';
 
-    const { groups, loading, error, refetch } = useOpenApiSpec(isSessionRunning ? specUrl : undefined);
+    const { groups, loading, error, refetch } = useOpenApiSpec(isSessionRunning ? specUrl : undefined, sessionEndpointHeaders);
 
     const {
         selectedEndpoint,
@@ -33,7 +33,7 @@ export function ApiTester({ sessionProxyUrl, isSessionRunning, onRunBackend, isR
         updateAuth,
     } = useRequestCollection(groups, baseUrl);
 
-    const { response, status, error: requestError, sendRequest, cancelRequest } = useApiRequest();
+    const { response, status, error: requestError, sendRequest, cancelRequest } = useApiRequest(sessionEndpointHeaders);
 
     if (!isSessionRunning) {
         return <EmptyState onRunBackend={onRunBackend} isRunning={isRunning} />;

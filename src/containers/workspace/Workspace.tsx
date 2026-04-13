@@ -15,7 +15,7 @@ import { buildFileTree, getDisplayPath } from '@/containers/workspace/utils/file
 import { useFiles } from '@/hooks/useFiles';
 import { useProjectCreation } from '@/hooks/useProjectCreation';
 import { useProjects } from '@/hooks/useProjects';
-import { useProjectChannel, useSocketEvent } from '@/hooks/useRealtimeUpdates';
+import { useProjectChannel, useRealtimeUpdates, useSocketEvent } from '@/hooks/useRealtimeUpdates';
 import { useSessions } from '@/hooks/useSessions';
 import { useSnapshots } from '@/hooks/useSnapshots';
 import type { Project, ProjectFile, SandboxResultEvent, TerminalPhase, TerminalStderrEvent, TerminalStdoutEvent } from '@/types/feathers';
@@ -167,6 +167,9 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     });
 
     // Listen for real-time terminal output from backend execution phases
+    // Uses useRealtimeUpdates (Feathers service layer) because the backend emits these
+    // as sessions service custom events, which arrive on the wire as "sessions terminal:stdout".
+    // useSocketEvent('terminal:stdout') would listen for a raw socket event that never fires.
     const PHASE_HEADERS: Record<TerminalPhase, string> = {
         deps:   '\x1b[33m\x1b[1m── Installing dependencies…\x1b[0m',
         start:  '\x1b[36m\x1b[1m── Starting server…\x1b[0m',
@@ -174,9 +177,8 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         repair: '\x1b[33m\x1b[1m── Auto-repair\x1b[0m',
     };
 
-    useSocketEvent<TerminalStdoutEvent>('terminal:stdout', (event) => {
+    useRealtimeUpdates<TerminalStdoutEvent>('sessions', 'terminal:stdout', (event) => {
         if (!event || !currentSessionRef.current || event.sessionId !== currentSessionRef.current._id) return;
-        // Support new format { text, phase } and old format { data, phase }
         const raw: string = event.text ?? (event as any).data ?? '';
         const phase = event.phase;
         if (!phase) return;
@@ -193,7 +195,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         setTerminalOutput((prev) => [...prev, ...lines, ...rawLines]);
     });
 
-    useSocketEvent<TerminalStderrEvent>('terminal:stderr', (event) => {
+    useRealtimeUpdates<TerminalStderrEvent>('sessions', 'terminal:stderr', (event) => {
         if (!event || !currentSessionRef.current || event.sessionId !== currentSessionRef.current._id) return;
         const raw: string = event.text ?? (event as any).data ?? '';
         const phase = event.phase;

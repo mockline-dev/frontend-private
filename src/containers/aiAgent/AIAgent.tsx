@@ -5,8 +5,9 @@ import { MarkdownMessage } from '@/components/custom/MarkdownMessage';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAIAgent } from '@/hooks/useAIAgent';
-import { CheckCircle2, Copy, Loader2, RefreshCcw, Sparkles, Zap } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { CheckCircle2, ChevronDown, ChevronUp, Copy, FileCode, Loader2, RefreshCcw, Sparkles, Wrench, XCircle, Zap } from 'lucide-react';
+import { useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
 interface AIAgentProps {
@@ -29,6 +30,7 @@ export function AiAgent({ projectId, onFilesChanged }: AIAgentProps) {
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+    const [expandedFilesId, setExpandedFilesId] = useState<string | null>(null);
     const isMobile = useIsMobile();
 
     // Auto-scroll to bottom when new messages arrive or streaming
@@ -124,7 +126,66 @@ export function AiAgent({ projectId, onFilesChanged }: AIAgentProps) {
                                 <span className={`text-[10px] ${message.role === 'user' ? 'text-gray-300' : 'text-gray-500'}`}>{formatTime(message.createdAt)}</span>
                             </div>
                             {message.role === 'assistant' ? (
-                                <MarkdownMessage content={message.content} />
+                                <>
+                                    <MarkdownMessage content={message.content} />
+
+                                    {/* Auto-fixed badge */}
+                                    {message.metadata?.autoFixed && (
+                                        <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 w-fit">
+                                            <Wrench className="w-3 h-3" />
+                                            <span>Auto-fixed{message.metadata.fixAttempts ? ` (${message.metadata.fixAttempts} attempt${message.metadata.fixAttempts > 1 ? 's' : ''})` : ''}</span>
+                                        </div>
+                                    )}
+
+                                    {/* Sandbox result */}
+                                    {message.metadata?.sandboxResult && (
+                                        <div className={`mt-1.5 flex items-center gap-1.5 text-[10px] rounded-lg px-2 py-1 w-fit border ${
+                                            message.metadata.sandboxResult.success
+                                                ? 'text-green-700 bg-green-50 border-green-200'
+                                                : 'text-red-700 bg-red-50 border-red-200'
+                                        }`}>
+                                            {message.metadata.sandboxResult.success
+                                                ? <CheckCircle2 className="w-3 h-3" />
+                                                : <XCircle className="w-3 h-3" />
+                                            }
+                                            <span>
+                                                {message.metadata.sandboxResult.success ? 'Validated' : 'Validation failed'}
+                                                {message.metadata.sandboxResult.durationMs > 0 && ` · ${(message.metadata.sandboxResult.durationMs / 1000).toFixed(1)}s`}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {/* Generated files list (collapsible) */}
+                                    {message.metadata?.filesGenerated && message.metadata.filesGenerated.length > 0 && (
+                                        <div className="mt-1.5">
+                                            <button
+                                                onClick={() => setExpandedFilesId(expandedFilesId === message._id ? null : message._id)}
+                                                className="flex items-center gap-1.5 text-[10px] text-gray-500 hover:text-gray-700 transition-colors"
+                                                aria-expanded={expandedFilesId === message._id}
+                                            >
+                                                <FileCode className="w-3 h-3" />
+                                                <span>{message.metadata.filesGenerated.length} file{message.metadata.filesGenerated.length !== 1 ? 's' : ''} generated</span>
+                                                {expandedFilesId === message._id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                            </button>
+                                            {expandedFilesId === message._id && (
+                                                <div className="mt-1 flex flex-wrap gap-1">
+                                                    {message.metadata.filesGenerated.map((f) => (
+                                                        <span key={f} className="text-[9px] font-mono bg-gray-100 text-gray-600 border border-gray-200 rounded px-1.5 py-0.5">
+                                                            {f}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Token usage */}
+                                    {message.metadata?.usage?.totalTokens && message.metadata.usage.totalTokens > 0 && (
+                                        <p className="mt-1.5 text-[9px] text-gray-400">
+                                            {message.metadata.usage.promptTokens?.toLocaleString()} in · {message.metadata.usage.completionTokens?.toLocaleString()} out · {message.metadata.usage.totalTokens?.toLocaleString()} total tokens
+                                        </p>
+                                    )}
+                                </>
                             ) : (
                                 <p className={`${isMobile ? 'text-[13px]' : 'text-sm'} leading-relaxed whitespace-pre-wrap`}>{message.content}</p>
                             )}

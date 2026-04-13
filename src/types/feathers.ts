@@ -181,6 +181,8 @@ export interface MessageMetadata {
     sandboxResult?: MessageSandboxResult;
     filesGenerated?: string[];   // file paths persisted to R2
     enhancedPrompt?: string;
+    autoFixed?: boolean;         // true if sandbox fix loop was applied
+    fixAttempts?: number;        // number of fix iterations applied
     [key: string]: unknown;
 }
 

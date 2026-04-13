@@ -123,10 +123,11 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
             toast.success('Backend session started');
         }
         if (currentSession?.status === 'repairing') {
-            const repairKey = `${currentSession._id}:repairing`;
+            const msg = currentSession.errorMessage ?? 'Auto-repair in progress…';
+            // Include errorMessage in key so each attempt (attempt 1/5, 2/5…) shows separately
+            const repairKey = `${currentSession._id}:repairing:${msg}`;
             if (repairWrittenRef.current !== repairKey) {
                 repairWrittenRef.current = repairKey;
-                const msg = currentSession.errorMessage ?? 'Auto-repair in progress…';
                 setTerminalOutput((prev) => [...prev, `\x1b[33m\x1b[1m⟳ REPAIRING\x1b[0m  ${msg}`]);
             }
         }

@@ -5,10 +5,18 @@ import { feathers } from '@feathersjs/feathers';
 import rest, { RestService } from '@feathersjs/rest-client';
 import { cookies } from 'next/headers';
 
+export interface ProjectsStats {
+    total: number;
+    byStatus: Record<string, number>;
+    thisWeek: number;
+}
+
 export const createFeathersServerClient = async () => {
     type ServiceTypes = {
         users: RestService;
-        projects: RestService;
+        projects: RestService & {
+            stats: (_data?: unknown, params?: unknown) => Promise<ProjectsStats>;
+        };
         files: RestService;
         uploads: RestService;
         media: RestService;

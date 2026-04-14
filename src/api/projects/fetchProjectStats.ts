@@ -12,7 +12,7 @@ export interface ProjectStats {
 export const fetchProjectStats = async (userId: string): Promise<ProjectStats> => {
     try {
         const server = await createFeathersServerClient();
-        const result = await (server.service(apiServices.projects) as any).stats({}, { query: { userId } });
+        const result = await server.service(apiServices.projects).stats({}, { query: { userId } });
         return JSON.parse(JSON.stringify(result)) as ProjectStats;
     } catch (err: unknown) {
         console.error('Failed to fetch project stats:', err);

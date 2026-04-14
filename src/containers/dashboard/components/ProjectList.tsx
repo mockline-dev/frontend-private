@@ -2,12 +2,14 @@
 
 import { Button } from '@/components/ui/button';
 import type { Project } from '@/types/feathers';
-import { Plus, Search, X } from 'lucide-react';
+import { Loader2, Plus, Search, X } from 'lucide-react';
 import { ProjectCard } from './ProjectCard';
 
 interface ProjectListProps {
     projects: Project[];
     loading: boolean;
+    loadingMore: boolean;
+    hasMore: boolean;
     showAllProjects: boolean;
     searchQuery: string;
     statusFilter: string;
@@ -18,12 +20,15 @@ interface ProjectListProps {
     onDeleteProject: (e: React.MouseEvent, projectId: string, projectName: string) => void;
     deletingProjectId: string | null;
     onCreateProject: () => void;
+    onLoadMore: () => void;
     formatTimeAgo: (timestamp: number) => string;
 }
 
 export function ProjectList({
     projects,
     loading,
+    loadingMore,
+    hasMore,
     showAllProjects,
     searchQuery,
     statusFilter,
@@ -34,16 +39,15 @@ export function ProjectList({
     onDeleteProject,
     deletingProjectId,
     onCreateProject,
+    onLoadMore,
     formatTimeAgo
 }: ProjectListProps) {
-    // Filter projects based on search query and status
     const filteredProjects = projects.filter((p) => {
         const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.description.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
         return matchesSearch && matchesStatus;
     });
 
-    // Get recent projects (first 3)
     const recentProjects = projects.slice(0, 3);
     const displayedProjects = showAllProjects ? filteredProjects : recentProjects;
 
@@ -112,16 +116,35 @@ export function ProjectList({
                         </Button>
                     </div>
                 ) : (
-                    displayedProjects.map((project) => (
-                        <ProjectCard
-                            key={project._id}
-                            project={project}
-                            onClick={() => onProjectClick(project._id)}
-                            onDelete={(e) => onDeleteProject(e, project._id, project.name)}
-                            isDeleting={deletingProjectId === project._id}
-                            formatTimeAgo={formatTimeAgo}
-                        />
-                    ))
+                    <>
+                        {displayedProjects.map((project) => (
+                            <ProjectCard
+                                key={project._id}
+                                project={project}
+                                onClick={() => onProjectClick(project._id)}
+                                onDelete={(e) => onDeleteProject(e, project._id, project.name)}
+                                isDeleting={deletingProjectId === project._id}
+                                formatTimeAgo={formatTimeAgo}
+                            />
+                        ))}
+                        {showAllProjects && hasMore && (
+                            <Button
+                                onClick={onLoadMore}
+                                variant="outline"
+                                className="w-full mt-2"
+                                disabled={loadingMore}
+                            >
+                                {loadingMore ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                        Loading...
+                                    </>
+                                ) : (
+                                    'Load more projects'
+                                )}
+                            </Button>
+                        )}
+                    </>
                 )}
             </div>
         </div>

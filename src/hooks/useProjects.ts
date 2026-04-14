@@ -7,18 +7,23 @@ import { fetchProjects } from '@/api/projects/fetchProjects';
 import { updateProject as updateProjectAction } from '@/api/projects/updateProject';
 import feathersClient from '@/services/featherClient';
 import { CreateProjectData, Project, ProjectQuery } from '@/types/feathers';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useRealtimeUpdates } from './useRealtimeUpdates';
+
+const PAGE_SIZE = 20;
 
 export interface UseProjectsReturn {
     // State
     projects: Project[];
     loading: boolean;
+    loadingMore: boolean;
+    hasMore: boolean;
     error: string | null;
     currentProject: Project | null;
 
     // Methods
     loadProjects: (query?: ProjectQuery) => Promise<void>;
+    loadMore: () => Promise<void>;
     loadProject: (projectId: string) => Promise<void>;
     createProject: (data: CreateProjectData) => Promise<Project>;
     updateProject: (projectId: string, data: Partial<Project>) => Promise<Project>;
@@ -31,13 +36,16 @@ export interface UseProjectsReturn {
 export function useProjects(initialProjects: Project[] = [], opts?: { disableRealtimeListeners?: boolean }): UseProjectsReturn {
     const [projects, setProjects] = useState<Project[]>(initialProjects);
     const [loading, setLoading] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(initialProjects.length >= PAGE_SIZE);
     const [error, setError] = useState<string | null>(null);
     const [currentProject, setCurrentProject] = useState<Project | null>(null);
+    const skipRef = useRef(initialProjects.length);
 
     const isBrowser = typeof window !== 'undefined';
     const disableRealtime = opts?.disableRealtimeListeners ?? false;
 
-    // Load all projects
+    // Load all projects (resets pagination)
     const loadProjects = useCallback(
         async (query?: ProjectQuery) => {
             if (!isBrowser) return;
@@ -46,8 +54,13 @@ export function useProjects(initialProjects: Project[] = [], opts?: { disableRea
             setError(null);
 
             try {
-                const result = await fetchProjects({ query: query || { $sort: { createdAt: -1 } } });
-                setProjects(Array.isArray(result) ? result : result.data || []);
+                const result = await fetchProjects({
+                    query: query || { $sort: { createdAt: -1 }, $limit: PAGE_SIZE }
+                });
+                const data = Array.isArray(result) ? result : result.data || [];
+                setProjects(data);
+                skipRef.current = data.length;
+                setHasMore(data.length >= PAGE_SIZE);
             } catch (err) {
                 const message = err instanceof Error ? err.message : 'Failed to load projects';
                 setError(message);
@@ -58,6 +71,28 @@ export function useProjects(initialProjects: Project[] = [], opts?: { disableRea
         },
         [isBrowser]
     );
+
+    // Load next page of projects
+    const loadMore = useCallback(async () => {
+        if (!isBrowser || loadingMore || !hasMore) return;
+
+        setLoadingMore(true);
+        try {
+            const result = await fetchProjects({
+                query: { $sort: { createdAt: -1 }, $limit: PAGE_SIZE, $skip: skipRef.current }
+            });
+            const data = Array.isArray(result) ? result : result.data || [];
+            setProjects((prev) => [...prev, ...data]);
+            skipRef.current += data.length;
+            setHasMore(data.length >= PAGE_SIZE);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Failed to load more projects';
+            setError(message);
+            console.error('[useProjects] Error loading more projects:', err);
+        } finally {
+            setLoadingMore(false);
+        }
+    }, [isBrowser, loadingMore, hasMore]);
 
     // Load a single project
     const loadProject = useCallback(
@@ -94,6 +129,7 @@ export function useProjects(initialProjects: Project[] = [], opts?: { disableRea
             try {
                 const project = await createProjectAction(data);
                 setProjects((prev) => [project, ...prev]);
+                skipRef.current += 1;
                 setCurrentProject(project);
                 return project;
             } catch (err) {
@@ -142,6 +178,7 @@ export function useProjects(initialProjects: Project[] = [], opts?: { disableRea
             try {
                 await deleteProjectAction({ id: projectId });
                 setProjects((prev) => prev.filter((p) => p._id !== projectId));
+                skipRef.current = Math.max(0, skipRef.current - 1);
                 setCurrentProject((prev) => (prev?._id === projectId ? null : prev));
             } catch (err) {
                 const message = err instanceof Error ? err.message : 'Failed to delete project';
@@ -183,7 +220,7 @@ export function useProjects(initialProjects: Project[] = [], opts?: { disableRea
         [isBrowser]
     );
 
-    // Refresh projects list
+    // Refresh projects list (resets to first page)
     const refresh = useCallback(async () => {
         await loadProjects();
     }, [loadProjects]);
@@ -191,6 +228,7 @@ export function useProjects(initialProjects: Project[] = [], opts?: { disableRea
     useRealtimeUpdates<Project>('projects', 'created', (project) => {
         if (disableRealtime) return;
         setProjects((prev) => (prev.some((p) => p._id === project._id) ? prev : [project, ...prev]));
+        skipRef.current += 1;
     });
 
     useRealtimeUpdates<Project>('projects', 'patched', (project) => {
@@ -202,6 +240,7 @@ export function useProjects(initialProjects: Project[] = [], opts?: { disableRea
     useRealtimeUpdates<Project>('projects', 'removed', (project) => {
         if (disableRealtime) return;
         setProjects((prev) => prev.filter((p) => p._id !== project._id));
+        skipRef.current = Math.max(0, skipRef.current - 1);
         setCurrentProject((prev) => (prev?._id === project._id ? null : prev));
     });
 
@@ -209,11 +248,14 @@ export function useProjects(initialProjects: Project[] = [], opts?: { disableRea
         // State
         projects,
         loading,
+        loadingMore,
+        hasMore,
         error,
         currentProject,
 
         // Methods
         loadProjects,
+        loadMore,
         loadProject,
         createProject,
         updateProject,

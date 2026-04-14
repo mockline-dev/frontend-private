@@ -1,20 +1,22 @@
 'use client';
 
-import type { Project } from '@/types/feathers';
 import { FolderOpen, LayoutGrid, TrendingUp } from 'lucide-react';
 
+export interface StatsData {
+    total: number;
+    byStatus: Record<string, number>;
+    thisWeek: number;
+}
+
 interface DashboardStatsProps {
-    projects: Project[];
+    stats: StatsData | null;
     loading: boolean;
 }
 
-export function DashboardStats({ projects, loading }: DashboardStatsProps) {
-    const totalProjects = projects.length;
-    const readyProjects = projects.filter((p) => p.status === 'ready' || p.status === 'running').length;
-
-    const oneWeekAgo = new Date();
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    const thisWeekProjects = projects.filter((p) => new Date(p.createdAt) >= oneWeekAgo).length;
+export function DashboardStats({ stats, loading }: DashboardStatsProps) {
+    const total = stats?.total ?? 0;
+    const ready = (stats?.byStatus?.['ready'] ?? 0) + (stats?.byStatus?.['running'] ?? 0);
+    const thisWeek = stats?.thisWeek ?? 0;
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
@@ -26,7 +28,7 @@ export function DashboardStats({ projects, loading }: DashboardStatsProps) {
                 </div>
                 <div>
                     <p className="text-xs text-muted-foreground mb-1">Total Projects</p>
-                    <p className="text-3xl font-bold text-foreground">{loading ? '...' : totalProjects}</p>
+                    <p className="text-3xl font-bold text-foreground">{loading ? '...' : total}</p>
                 </div>
             </div>
 
@@ -38,7 +40,7 @@ export function DashboardStats({ projects, loading }: DashboardStatsProps) {
                 </div>
                 <div>
                     <p className="text-xs text-muted-foreground mb-1">Ready Projects</p>
-                    <p className="text-3xl font-bold text-foreground">{loading ? '...' : readyProjects}</p>
+                    <p className="text-3xl font-bold text-foreground">{loading ? '...' : ready}</p>
                 </div>
             </div>
 
@@ -50,7 +52,7 @@ export function DashboardStats({ projects, loading }: DashboardStatsProps) {
                 </div>
                 <div>
                     <p className="text-xs text-muted-foreground mb-1">This Week</p>
-                    <p className="text-3xl font-bold text-foreground">{loading ? '...' : thisWeekProjects}</p>
+                    <p className="text-3xl font-bold text-foreground">{loading ? '...' : thisWeek}</p>
                     <p className="text-xs text-primary mt-1">new projects</p>
                 </div>
             </div>

@@ -4,8 +4,9 @@ import Header from '@/components/custom/Header';
 import { useProjects } from '@/hooks/useProjects';
 import type { Project } from '@/types/feathers';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { fetchProjectStats, type ProjectStats } from '@/api/projects/fetchProjectStats';
 import { UserData } from '../auth/types';
 import { DashboardStats } from './components/DashboardStats';
 import { ProjectList } from './components/ProjectList';
@@ -22,14 +23,40 @@ export function Dashboard({ currentUser, initialProjects = [] }: DashboardProps)
     const [statusFilter, setStatusFilter] = useState<string>('all');
     const [showAllProjects, setShowAllProjects] = useState(false);
     const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
+    const [stats, setStats] = useState<ProjectStats | null>(null);
+    const [statsLoading, setStatsLoading] = useState(true);
 
-    const { projects, loading, error, loadProjects, deleteProject, joinProject, leaveProject, refresh } = useProjects(initialProjects);
+    const { projects, loading, loadingMore, hasMore, error, loadProjects, loadMore, deleteProject, joinProject, leaveProject } = useProjects(initialProjects);
+
+    const isBrowser = typeof window !== 'undefined';
 
     useEffect(() => {
-        if (typeof window !== 'undefined') {
+        if (isBrowser) {
             loadProjects();
         }
-    }, [loadProjects]);
+    }, [loadProjects, isBrowser]);
+
+    // Fetch stats from backend aggregation
+    const loadStats = useCallback(async () => {
+        if (!currentUser?.feathersId) return;
+        setStatsLoading(true);
+        try {
+            const result = await fetchProjectStats(currentUser.feathersId);
+            setStats(result);
+        } finally {
+            setStatsLoading(false);
+        }
+    }, [currentUser?.feathersId]);
+
+    useEffect(() => {
+        if (isBrowser) loadStats();
+    }, [loadStats, isBrowser]);
+
+    // Refresh stats when projects change (create/delete)
+    useEffect(() => {
+        if (isBrowser && !loading) loadStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [projects.length]);
 
     const joinedIdsRef = useRef<Set<string>>(new Set());
 
@@ -38,7 +65,6 @@ export function Dashboard({ currentUser, initialProjects = [] }: DashboardProps)
 
         const currentIds = new Set(projects.map((p) => p._id));
 
-        // Join new projects
         projects.forEach((project) => {
             if (!joinedIdsRef.current.has(project._id)) {
                 joinProject(project._id);
@@ -46,7 +72,6 @@ export function Dashboard({ currentUser, initialProjects = [] }: DashboardProps)
             }
         });
 
-        // Leave removed projects
         joinedIdsRef.current.forEach((id) => {
             if (!currentIds.has(id)) {
                 leaveProject(id);
@@ -134,7 +159,7 @@ export function Dashboard({ currentUser, initialProjects = [] }: DashboardProps)
                     <p className="text-muted-foreground">Here&apos;s what&apos;s happening with your projects</p>
                 </div>
 
-                <DashboardStats projects={projects} loading={loading} />
+                <DashboardStats stats={stats} loading={statsLoading} />
 
                 <QuickActions onCreateProject={handleCreateProject} onViewAllProjects={() => setShowAllProjects(true)} />
 
@@ -142,6 +167,8 @@ export function Dashboard({ currentUser, initialProjects = [] }: DashboardProps)
                     <ProjectList
                         projects={projects}
                         loading={loading}
+                        loadingMore={loadingMore}
+                        hasMore={hasMore}
                         showAllProjects={showAllProjects}
                         searchQuery={searchQuery}
                         statusFilter={statusFilter}
@@ -152,6 +179,7 @@ export function Dashboard({ currentUser, initialProjects = [] }: DashboardProps)
                         onDeleteProject={handleDeleteProject}
                         deletingProjectId={deletingProjectId}
                         onCreateProject={handleCreateProject}
+                        onLoadMore={loadMore}
                         formatTimeAgo={formatTimeAgo}
                     />
                 </div>

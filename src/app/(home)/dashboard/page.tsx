@@ -19,7 +19,7 @@ export default async function DashboardPage() {
         const result = await feathers.service('projects').find({
             query: {
                 $sort: { createdAt: -1 },
-                $limit: 10
+                $limit: 20
             }
         });
         // Use the server data directly - the Dashboard component will handle type compatibility

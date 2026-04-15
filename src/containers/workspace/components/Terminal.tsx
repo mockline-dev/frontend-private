@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Terminal as XTerm } from '@xterm/xterm';
-import { Bug, Check, Eraser, RefreshCw, Square, Terminal as TerminalIcon, X, Zap } from 'lucide-react';
+import { Bug, Check, CheckCheck, Eraser, RefreshCw, Square, Terminal as TerminalIcon, X, Zap } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import '@xterm/xterm/css/xterm.css';
 import { DebugPanel } from './DebugPanel';
@@ -24,6 +24,9 @@ interface TerminalProps {
     variant?: 'panel' | 'floating';
     onClear?: (() => void) | undefined;
     onRetry?: (() => void) | undefined;
+    repairStatus?: 'analyzing' | 'applying' | 'completed' | 'failed' | null;
+    repairAttempt?: number;
+    repairMaxAttempts?: number;
 }
 
 // ─── Status chip ──────────────────────────────────────────────────────────────
@@ -98,6 +101,9 @@ export function Terminal({
     variant = 'panel',
     onClear,
     onRetry,
+    repairStatus,
+    repairAttempt,
+    repairMaxAttempts,
 }: TerminalProps) {
     const containerRef  = useRef<HTMLDivElement>(null);
     const xtermRef      = useRef<XTerm | null>(null);
@@ -275,11 +281,32 @@ export function Terminal({
                         onClose={() => setDebugMode(false)}
                     />
                 ) : (
-                    <div
-                        ref={containerRef}
-                        className="flex-1 overflow-hidden"
-                        style={{ padding: '6px 8px' }}
-                    />
+                    <>
+                        {/* Repair banner */}
+                        {repairStatus && repairStatus !== 'completed' && repairStatus !== 'failed' && (
+                            <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border-b border-amber-500/30 text-amber-300 text-[11px] font-mono shrink-0">
+                                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                                <span>Auto-repair{repairAttempt && repairMaxAttempts ? ` ${repairAttempt}/${repairMaxAttempts}` : ''} — {repairStatus === 'analyzing' ? 'analyzing error…' : 'applying fix…'}</span>
+                            </div>
+                        )}
+                        {repairStatus === 'completed' && (
+                            <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border-b border-emerald-500/30 text-emerald-300 text-[11px] font-mono shrink-0">
+                                <CheckCheck className="w-3.5 h-3.5 shrink-0" />
+                                <span>Fixed — session restarting…</span>
+                            </div>
+                        )}
+                        {repairStatus === 'failed' && (
+                            <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 border-b border-red-500/30 text-red-300 text-[11px] font-mono shrink-0">
+                                <X className="w-3.5 h-3.5 shrink-0" />
+                                <span>Repair failed</span>
+                            </div>
+                        )}
+                        <div
+                            ref={containerRef}
+                            className="flex-1 overflow-hidden"
+                            style={{ padding: '6px 8px' }}
+                        />
+                    </>
                 )}
             </div>
         );

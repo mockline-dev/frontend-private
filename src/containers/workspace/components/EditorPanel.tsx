@@ -26,6 +26,9 @@ interface EditorPanelProps {
     sessionProxyUrl?: string | null;
     sessionEndpointHeaders?: Record<string, string> | null;
     terminalOutput?: string[];
+    repairStatus?: 'analyzing' | 'applying' | 'completed' | 'failed' | null;
+    repairAttempt?: number;
+    repairMaxAttempts?: number;
     onContentChange: (value: string | undefined) => void;
     onSaveFile: () => void;
     onRunBackend: () => void;
@@ -56,6 +59,9 @@ export function EditorPanel({
     sessionProxyUrl,
     sessionEndpointHeaders,
     terminalOutput = [],
+    repairStatus,
+    repairAttempt,
+    repairMaxAttempts,
     onContentChange,
     onSaveFile,
     onRunBackend,
@@ -72,7 +78,7 @@ export function EditorPanel({
     return (
         <ResizablePanelGroup key={isTerminalOpen ? 'terminal-open' : 'terminal-closed'} direction="vertical" className="h-full">
             <ResizablePanel defaultSize={isTerminalOpen && activeView === 'code' ? 70 : 100} minSize={isTerminalOpen && activeView === 'code' ? 50 : 30}>
-                <div className="h-full flex flex-col overflow-hidden bg-zinc-50">
+                <div className="h-full flex flex-col overflow-hidden bg-background">
                     {activeView === 'code' ? (
                         <>
                             <EditorTabs tabs={tabs} activeTabId={activeTabId} onSelectTab={onSelectTab} onCloseTab={onCloseTab} />
@@ -135,9 +141,9 @@ export function EditorPanel({
             </ResizablePanel>
             {isTerminalOpen && activeView === 'code' && (
                 <>
-                    <ResizableHandle className="h-1 bg-zinc-200 hover:bg-blue-400 transition-colors cursor-row-resize" />
+                    <ResizableHandle className="h-1 bg-border hover:bg-blue-400 transition-colors cursor-row-resize" />
                     <ResizablePanel minSize={15} defaultSize={30}>
-                        <Terminal variant="panel" isOpen={true} onClose={onTerminalClose} projectId={currentProjectId} sessionId={sessionId} sessionStatus={sessionStatus} failureType={failureType} sessionOutput={terminalOutput} {...(onTerminalRetry ? { onRetry: onTerminalRetry } : {})} />
+                        <Terminal variant="panel" isOpen={true} onClose={onTerminalClose} projectId={currentProjectId} sessionId={sessionId} sessionStatus={sessionStatus} failureType={failureType} sessionOutput={terminalOutput} {...(repairStatus != null ? { repairStatus } : {})} {...(repairAttempt ? { repairAttempt } : {})} {...(repairMaxAttempts ? { repairMaxAttempts } : {})} {...(onTerminalRetry ? { onRetry: onTerminalRetry } : {})} />
                     </ResizablePanel>
                 </>
             )}

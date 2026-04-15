@@ -5,6 +5,7 @@ import { apiServices } from '../services';
 
 export interface ProjectStats {
     total: number;
+    ready: number;
     byStatus: Record<string, number>;
     thisWeek: number;
 }
@@ -16,6 +17,6 @@ export const fetchProjectStats = async (userId: string): Promise<ProjectStats> =
         return JSON.parse(JSON.stringify(result)) as ProjectStats;
     } catch (err: unknown) {
         console.error('Failed to fetch project stats:', err);
-        return { total: 0, byStatus: {}, thisWeek: 0 };
+        return { total: 0, ready: 0, byStatus: {}, thisWeek: 0 };
     }
 };

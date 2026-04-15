@@ -65,17 +65,17 @@ export function WorkspaceSidebar({
     };
 
     return (
-        <div className="h-full border-r border-zinc-200 bg-white flex flex-col">
+        <div className="h-full border-r border-border bg-background flex flex-col">
             {/* Tab strip */}
-            <div className="border-b border-zinc-200 flex">
+            <div className="border-b border-border flex">
                 {SIDEBAR_VIEWS.map(({ id, label }) => (
                     <button
                         key={id}
                         onClick={() => onSidebarViewChange(id)}
                         className={`flex-1 px-1 py-2.5 text-xs font-medium transition-colors flex items-center justify-center gap-1 ${
                             sidebarView === id
-                                ? 'bg-white text-zinc-900 border-b-2 border-black'
-                                : 'text-zinc-500 hover:text-zinc-900 bg-zinc-50'
+                                ? 'bg-background text-foreground border-b-2 border-foreground'
+                                : 'text-muted-foreground hover:text-foreground bg-muted/40'
                         }`}
                     >
                         {id === 'files' && <FolderTree className="w-3.5 h-3.5" />}

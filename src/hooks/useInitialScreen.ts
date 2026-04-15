@@ -2,6 +2,7 @@
 
 import { createMessage } from '@/api/messages/createMessage';
 import { appRoutes } from '@/config/appRoutes';
+import { backendUrl } from '@/config/environment';
 import { UserData } from '@/containers/auth/types';
 import { useProjectCreation } from '@/hooks/useProjectCreation';
 import { useRouter } from 'next/navigation';
@@ -23,6 +24,8 @@ function deriveProjectName(prompt: string): string {
 export function useInitialScreen(options?: UseInitialScreenOptions) {
     const router = useRouter();
     const [promptValue, setPromptValue] = useState('');
+    const [enhanceLoading, setEnhanceLoading] = useState(false);
+    const [projectName, setProjectName] = useState('');
 
     const {
         state: creationState,
@@ -57,9 +60,10 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
 
             try {
                 // Step 1: Create project with basic metadata derived from prompt
+                const resolvedName = projectName.trim() || deriveProjectName(normalizedPrompt);
                 const project = await createProject({
                     userId: options?.currentUser?.feathersId ?? '',
-                    name: deriveProjectName(normalizedPrompt),
+                    name: resolvedName,
                     description: normalizedPrompt,
                     framework: 'fast-api',
                     language: 'python',
@@ -79,7 +83,35 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
                 toast.error(message);
             }
         },
-        [createProject, isCreating, options?.currentUser, router]
+        [createProject, isCreating, options?.currentUser, projectName, router]
+    );
+
+    const handleEnhancePrompt = useCallback(
+        async (prompt: string) => {
+            const normalized = prompt.trim();
+            if (!normalized || enhanceLoading) return;
+
+            setEnhanceLoading(true);
+            try {
+                const res = await fetch(`${backendUrl}/enhance-prompt`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(options?.currentUser?.jwt ? { Authorization: `Bearer ${options.currentUser.jwt}` } : {})
+                    },
+                    body: JSON.stringify({ prompt: normalized, framework: 'fast-api', language: 'python' })
+                });
+                if (!res.ok) throw new Error('Enhancement failed');
+                const data = await res.json() as { enhanced?: string; prompt?: string };
+                const enhanced = data.enhanced ?? data.prompt ?? normalized;
+                setPromptValue(enhanced);
+            } catch {
+                toast.error('Failed to enhance prompt');
+            } finally {
+                setEnhanceLoading(false);
+            }
+        },
+        [enhanceLoading, options?.currentUser?.jwt]
     );
 
     useEffect(() => {
@@ -93,13 +125,23 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
         }
     }, [options?.currentUser]);
 
+    // Fetch a random project name on mount
+    useEffect(() => {
+        fetch(`${backendUrl}/generate-name`)
+            .then((r) => r.json() as Promise<{ name?: string }>)
+            .then((d) => { if (d.name) setProjectName(d.name); })
+            .catch(() => {});
+    }, []);
+
     return {
         promptValue,
         setPromptValue,
+        projectName,
+        setProjectName,
         // Backend now handles enhancement; expose state for UI compatibility
         enhancedPrompt: creationState.enhancedPrompt ?? '',
-        enhanceLoading: false,
-        handleEnhancePrompt: async () => {},
+        enhanceLoading,
+        handleEnhancePrompt,
         handleSendPrompt,
         creationState,
         isCreating,

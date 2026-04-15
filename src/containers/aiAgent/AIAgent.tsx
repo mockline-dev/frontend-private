@@ -5,7 +5,7 @@ import { MarkdownMessage } from '@/components/custom/MarkdownMessage';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAIAgent } from '@/hooks/useAIAgent';
-import { CheckCircle2, ChevronDown, ChevronUp, Copy, FileCode, Loader2, RefreshCcw, Sparkles, Wrench, XCircle, Zap } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronUp, Copy, FileCode, Loader2, RefreshCcw, Sparkles, Wrench, XCircle, Zap, AlertTriangle, CheckCheck } from 'lucide-react';
 import { useState } from 'react';
 import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
@@ -103,8 +103,52 @@ export function AiAgent({ projectId, onFilesChanged }: AIAgentProps) {
                     </div>
                 )}
 
-                {messages.map((message) => (
-                    <div
+                {messages.map((message) => {
+                    // ── System message — full-width status banner ────────────────
+                    if (message.role === 'system') {
+                        const mtype = message.metadata?.type as string | undefined;
+                        const isRepairStart    = mtype === 'repair-start';
+                        const isRepairProgress = mtype === 'repair-progress';
+                        const isRepairSuccess  = mtype === 'repair-success';
+                        const isRepairError    = mtype === 'repair-error';
+                        const isRepair = isRepairStart || isRepairProgress || isRepairSuccess || isRepairError;
+
+                        if (isRepair) {
+                            const attempt = message.metadata?.repairAttempt as number | undefined;
+                            const maxAttempts = message.metadata?.repairMaxAttempts as number | undefined;
+                            const attemptLabel = attempt && maxAttempts ? ` ${attempt}/${maxAttempts}` : attempt ? ` ${attempt}` : '';
+
+                            const cfg = isRepairSuccess
+                                ? { bg: 'bg-green-50 border-green-200', text: 'text-green-700', icon: <CheckCheck className="w-3.5 h-3.5 shrink-0" /> }
+                                : isRepairError
+                                ? { bg: 'bg-red-50 border-red-200', text: 'text-red-700', icon: <XCircle className="w-3.5 h-3.5 shrink-0" /> }
+                                : { bg: 'bg-amber-50 border-amber-200', text: 'text-amber-700', icon: <Wrench className="w-3.5 h-3.5 shrink-0 animate-pulse" /> };
+
+                            return (
+                                <div key={message._id} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[11px] font-medium ml-2 mr-2 ${cfg.bg} ${cfg.text}`}>
+                                    {cfg.icon}
+                                    <span>
+                                        {isRepairStart && `Auto-repair started${attemptLabel}`}
+                                        {isRepairProgress && `Repairing${attemptLabel}… ${message.metadata?.phase ?? ''}`}
+                                        {isRepairSuccess && `Repaired successfully${message.metadata?.fixAttempts ? ` (${message.metadata.fixAttempts} attempt${(message.metadata.fixAttempts as number) > 1 ? 's' : ''})` : ''}`}
+                                        {isRepairError && `Auto-repair failed — ${message.content}`}
+                                        {!isRepairStart && !isRepairProgress && !isRepairSuccess && !isRepairError && message.content}
+                                    </span>
+                                </div>
+                            );
+                        }
+
+                        // Generic system message — gray italic centered
+                        return (
+                            <div key={message._id} className="text-center text-[10px] text-gray-400 italic py-1 px-4">
+                                {message.content}
+                            </div>
+                        );
+                    }
+
+                    // ── User / assistant bubble ──────────────────────────────────
+                    return (
+                        <div
                         key={message._id}
                         className={`group flex gap-2 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                         aria-label={message.role === 'user' ? 'User message' : 'Assistant message'}
@@ -220,7 +264,8 @@ export function AiAgent({ projectId, onFilesChanged }: AIAgentProps) {
                             </div>
                         </div>
                     </div>
-                ))}
+                );
+                })}
 
                 {showTypingIndicator && (
                     <div className="flex gap-2" role="status" aria-live="polite" aria-label="Assistant is composing a response">

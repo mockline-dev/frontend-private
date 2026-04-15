@@ -183,6 +183,12 @@ export interface MessageMetadata {
     enhancedPrompt?: string;
     autoFixed?: boolean;         // true if sandbox fix loop was applied
     fixAttempts?: number;        // number of fix iterations applied
+    // System message type — drives chat panel styling
+    type?: 'repair-start' | 'repair-progress' | 'repair-success' | 'repair-error';
+    phase?: string;
+    status?: string;
+    repairAttempt?: number;
+    repairMaxAttempts?: number;
     [key: string]: unknown;
 }
 
@@ -406,10 +412,35 @@ export interface TerminalStdoutEvent {
     text: string;
 }
 
-/** Fired when the sandbox process writes to stderr */
+/** Fired when sandbox process writes to stderr */
 export interface TerminalStderrEvent {
     projectId?: string;
     sessionId?: string;
     phase: TerminalPhase;
     text: string;
+}
+
+/** Repair lifecycle events from sessions service */
+export interface RepairStartedEvent {
+    sessionId: string;
+    attempt: number;
+    maxAttempts: number;
+}
+
+export interface RepairProgressEvent {
+    sessionId: string;
+    attempt: number;
+    maxAttempts: number;
+    phase: 'analyzing' | 'applying';
+}
+
+export interface RepairCompletedEvent {
+    sessionId: string;
+    attempt: number;
+    durationMs: number;
+}
+
+export interface RepairFailedEvent {
+    sessionId: string;
+    error: string;
 }

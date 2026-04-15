@@ -18,7 +18,7 @@ import { useProjects } from '@/hooks/useProjects';
 import { useProjectChannel, useRealtimeUpdates, useSocketEvent } from '@/hooks/useRealtimeUpdates';
 import { useSessions } from '@/hooks/useSessions';
 import { useSnapshots } from '@/hooks/useSnapshots';
-import type { Project, ProjectFile, SandboxResultEvent, TerminalPhase, TerminalStderrEvent, TerminalStdoutEvent } from '@/types/feathers';
+import type { Project, ProjectFile, RepairCompletedEvent, RepairFailedEvent, RepairProgressEvent, RepairStartedEvent, SandboxResultEvent, TerminalPhase, TerminalStderrEvent, TerminalStdoutEvent } from '@/types/feathers';
 import type { ActiveView, CursorPosition, SidebarView } from '@/types/workspace';
 import { QuickOpen } from '@/components/custom/QuickOpen';
 import { useOpenTabs } from '@/hooks/useOpenTabs';
@@ -54,10 +54,14 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     const [isRunning, setIsRunning] = useState(false);
     const [isBackendReady, setIsBackendReady] = useState(false);
     const [terminalOutput, setTerminalOutput] = useState<string[]>([]);
+    const [repairStatus, setRepairStatus] = useState<'analyzing' | 'applying' | 'completed' | 'failed' | null>(null);
+    const [repairAttempt, setRepairAttempt] = useState(0);
+    const [repairMaxAttempts, setRepairMaxAttempts] = useState(0);
     const [isSnapshotCreating, setIsSnapshotCreating] = useState(false);
     const [snapshotActionId, setSnapshotActionId] = useState<string | null>(null);
     const [loadingContent, setLoadingContent] = useState(false);
     const [cursorPosition, setCursorPosition] = useState<CursorPosition | undefined>(undefined);
+    const [isDownloading, setIsDownloading] = useState(false);
     const [quickOpenOpen, setQuickOpenOpen] = useState(false);
     const [recentFiles, setRecentFiles] = useState<string[]>([]);
 
@@ -87,7 +91,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         }
     });
 
-    const { currentProject, loadProject } = useProjects(initialProject ? [initialProject] : []);
+    const { currentProject, loadProject, updateProject } = useProjects(initialProject ? [initialProject] : []);
     const { files, loadFiles, updateFile, currentFile, setCurrentFile } = useFiles(initialFiles);
     const { snapshots, loading: snapshotsLoading, createSnapshot, rollbackToSnapshot, deleteSnapshot, refresh: refreshSnapshots } = useSnapshots([]);
     const { currentSession, isSessionRunning, sessionProxyUrl, sessionEndpointHeaders, createSession, stopSession, loadSessions } = useSessions();
@@ -211,6 +215,34 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         setTerminalOutput((prev) => [...prev, ...lines, ...rawLines]);
     });
 
+    useRealtimeUpdates<RepairStartedEvent>('sessions', 'repair:started', (event) => {
+        if (!event || !currentSessionRef.current || event.sessionId !== currentSessionRef.current._id) return;
+        setRepairStatus('analyzing');
+        setRepairAttempt(event.attempt);
+        setRepairMaxAttempts(event.maxAttempts);
+    });
+
+    useRealtimeUpdates<RepairProgressEvent>('sessions', 'repair:progress', (event) => {
+        if (!event || !currentSessionRef.current || event.sessionId !== currentSessionRef.current._id) return;
+        setRepairStatus(event.phase);
+        setRepairAttempt(event.attempt);
+        setRepairMaxAttempts(event.maxAttempts);
+    });
+
+    useRealtimeUpdates<RepairCompletedEvent>('sessions', 'repair:completed', (event) => {
+        if (!event || !currentSessionRef.current || event.sessionId !== currentSessionRef.current._id) return;
+        setRepairStatus('completed');
+        const secs = event.durationMs ? ` in ${(event.durationMs / 1000).toFixed(1)}s` : '';
+        setTerminalOutput((prev) => [...prev, `\x1b[92m\x1b[1m✔ Repair completed${secs}\x1b[0m`]);
+        setTimeout(() => setRepairStatus(null), 3000);
+    });
+
+    useRealtimeUpdates<RepairFailedEvent>('sessions', 'repair:failed', (event) => {
+        if (!event || !currentSessionRef.current || event.sessionId !== currentSessionRef.current._id) return;
+        setRepairStatus('failed');
+        setTerminalOutput((prev) => [...prev, `\x1b[91m\x1b[1m✖ Auto-repair failed: ${event.error}\x1b[0m`]);
+    });
+
     useEffect(() => {
         if (currentProjectId && isBrowser) loadFiles(currentProjectId);
     }, [currentProjectId, loadFiles, isBrowser]);
@@ -281,6 +313,12 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         if (page === 'initial') router.push('/');
         else router.push(page === 'dashboard' ? '/dashboard' : '/workspace');
     };
+
+    const handleRenameProject = useCallback(async (name: string) => {
+        if (!currentProjectId) return;
+        await updateProject(currentProjectId, { name });
+        setProjectName(name);
+    }, [currentProjectId, updateProject]);
 
     const handleFileSelect = useCallback(
         async (filePath: string) => {
@@ -437,6 +475,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
 
     const handleDownload = useCallback(async () => {
         if (!currentProjectId) { toast.error('No project selected'); return; }
+        setIsDownloading(true);
         try {
             const result = await downloadProject({ projectId: currentProjectId });
             if (!result.success) throw new Error(result.error);
@@ -454,6 +493,8 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         } catch (error) {
             console.error('Download error:', error);
             toast.error(error instanceof Error ? error.message : 'Failed to download project');
+        } finally {
+            setIsDownloading(false);
         }
     }, [currentProjectId]);
 
@@ -576,7 +617,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     const statusLanguage = activeFileName ? getLanguageFromFileName(activeFileName) : undefined;
 
     return (
-        <div className="h-screen flex flex-col bg-white">
+        <div className="h-screen flex flex-col bg-background">
             <WorkspaceHeader
                 currentUser={currentUser}
                 projectName={projectName}
@@ -586,9 +627,11 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                 currentProjectId={currentProjectId}
                 filesCount={files.length}
                 hasUnsavedChanges={hasUnsavedChanges}
+                isDownloading={isDownloading}
                 onViewChange={setActiveView}
                 onDownload={handleDownload}
                 onNavigate={handleNavigate}
+                {...(currentProjectId ? { onRenameProject: handleRenameProject } : {})}
             />
 
             <div className="flex-1 flex overflow-hidden">
@@ -612,7 +655,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                             onDeleteSnapshot={handleDeleteSnapshot}
                         />
                     </ResizablePanel>
-                    <ResizableHandle className="w-1 bg-zinc-200 hover:bg-blue-400 transition-colors cursor-col-resize" />
+                    <ResizableHandle className="w-1 bg-border hover:bg-blue-400 transition-colors cursor-col-resize" />
                     <ResizablePanel defaultSize={75} minSize={40}>
                         <EditorPanel
                             activeView={activeView}
@@ -629,6 +672,9 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                             sessionProxyUrl={sessionProxyUrl}
                             sessionEndpointHeaders={sessionEndpointHeaders}
                             terminalOutput={terminalOutput}
+                            repairStatus={repairStatus}
+                            repairAttempt={repairAttempt}
+                            repairMaxAttempts={repairMaxAttempts}
                             onContentChange={handleContentChange}
                             onSaveFile={handleSaveFile}
                             onRunBackend={handleRunBackend}

@@ -4,6 +4,7 @@ import { FolderOpen, LayoutGrid, TrendingUp } from 'lucide-react';
 
 export interface StatsData {
     total: number;
+    ready?: number;
     byStatus: Record<string, number>;
     thisWeek: number;
 }
@@ -15,7 +16,7 @@ interface DashboardStatsProps {
 
 export function DashboardStats({ stats, loading }: DashboardStatsProps) {
     const total = stats?.total ?? 0;
-    const ready = (stats?.byStatus?.['ready'] ?? 0) + (stats?.byStatus?.['running'] ?? 0);
+    const ready = stats?.ready ?? ((stats?.byStatus?.['ready'] ?? 0) + (stats?.byStatus?.['running'] ?? 0));
     const thisWeek = stats?.thisWeek ?? 0;
 
     return (

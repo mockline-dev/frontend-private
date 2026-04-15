@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import feathersClient from '@/services/featherClient';
 import { ChevronDown, ChevronRight, Loader2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -27,15 +28,20 @@ export function DebugPanel({ sessionId, backendUrl, onClose }: DebugPanelProps) 
 
     useEffect(() => {
         const url = `${backendUrl.replace(/\/$/, '')}/api-test/${sessionId}/_debug`;
-        fetch(url)
-            .then(async (res) => {
+        (async () => {
+            try {
+                const token = await feathersClient.authentication.getAccessToken();
+                const res = await fetch(url, {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {}
+                });
                 const json = await res.json();
                 setData(json);
-            })
-            .catch((err) => {
+            } catch (err) {
                 setData({ error: err instanceof Error ? err.message : 'Failed to fetch debug info' });
-            })
-            .finally(() => setLoading(false));
+            } finally {
+                setLoading(false);
+            }
+        })();
     }, [sessionId, backendUrl]);
 
     return (

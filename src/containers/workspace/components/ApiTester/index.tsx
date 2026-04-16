@@ -70,7 +70,7 @@ export function ApiTester({ sessionId, sessionProxyUrl, sessionEndpointHeaders, 
             />
 
             <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
-                <ResizablePanel defaultSize={22} minSize={15} maxSize={35}>
+                <ResizablePanel defaultSize={130} maxSize={295}>
                     <EndpointSidebar groups={groups} selectedEndpointId={selectedEndpoint?.id ?? null} onSelect={(ep) => selectEndpoint(ep, baseUrl)} />
                 </ResizablePanel>
 
@@ -78,7 +78,7 @@ export function ApiTester({ sessionId, sessionProxyUrl, sessionEndpointHeaders, 
 
                 <ResizablePanel defaultSize={78}>
                     <ResizablePanelGroup direction="vertical" className="h-full">
-                        <ResizablePanel defaultSize={45} minSize={25}>
+                        <ResizablePanel defaultSize={75} minSize={65}>
                             <RequestConfigTabs
                                 params={requestState.params}
                                 headers={requestState.headers}

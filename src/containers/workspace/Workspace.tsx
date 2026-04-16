@@ -6,26 +6,36 @@ import { createUpload } from '@/api/uploads/createUpload';
 import { patchUpload } from '@/api/uploads/patchUpload';
 import { updateUpload } from '@/api/uploads/updateUpload';
 import { ProjectCreationLoader } from '@/components/custom/ProjectCreationLoader';
+import { QuickOpen } from '@/components/custom/QuickOpen';
+import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { EditorPanel } from '@/containers/workspace/components/EditorPanel';
 import { WorkspaceHeader } from '@/containers/workspace/components/WorkspaceHeader';
 import { WorkspaceSidebar } from '@/containers/workspace/components/WorkspaceSidebar';
 import { WorkspaceStatusBar } from '@/containers/workspace/components/WorkspaceStatusBar';
-import { buildFileTree, getDisplayPath } from '@/containers/workspace/utils/fileTree';
+import { buildFileTree, flattenFileTree, getDisplayPath } from '@/containers/workspace/utils/fileTree';
 import { useFiles } from '@/hooks/useFiles';
+import { useOpenTabs } from '@/hooks/useOpenTabs';
 import { useProjectCreation } from '@/hooks/useProjectCreation';
 import { useProjects } from '@/hooks/useProjects';
 import { useProjectChannel, useRealtimeUpdates, useSocketEvent } from '@/hooks/useRealtimeUpdates';
 import { useSessions } from '@/hooks/useSessions';
 import { useSnapshots } from '@/hooks/useSnapshots';
-import type { Project, ProjectFile, RepairCompletedEvent, RepairFailedEvent, RepairProgressEvent, RepairStartedEvent, SandboxResultEvent, TerminalPhase, TerminalStderrEvent, TerminalStdoutEvent } from '@/types/feathers';
+import type {
+    Project,
+    ProjectFile,
+    RepairCompletedEvent,
+    RepairFailedEvent,
+    RepairProgressEvent,
+    RepairStartedEvent,
+    SandboxResultEvent,
+    TerminalPhase,
+    TerminalStderrEvent,
+    TerminalStdoutEvent
+} from '@/types/feathers';
 import type { ActiveView, CursorPosition, SidebarView } from '@/types/workspace';
-import { QuickOpen } from '@/components/custom/QuickOpen';
-import { useOpenTabs } from '@/hooks/useOpenTabs';
-import { flattenFileTree } from '@/containers/workspace/utils/fileTree';
 import { clearSavedPrompt, getSavedPrompt } from '@/utils/promptStorage';
 import { Terminal as TerminalIcon } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -96,7 +106,9 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     const { snapshots, loading: snapshotsLoading, createSnapshot, rollbackToSnapshot, deleteSnapshot, refresh: refreshSnapshots } = useSnapshots([]);
     const { currentSession, isSessionRunning, sessionProxyUrl, sessionEndpointHeaders, createSession, stopSession, loadSessions } = useSessions();
 
-    useEffect(() => { currentSessionRef.current = currentSession; }, [currentSession]);
+    useEffect(() => {
+        currentSessionRef.current = currentSession;
+    }, [currentSession]);
 
     useProjectChannel(currentProjectId || null);
 
@@ -107,7 +119,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     useEffect(() => {
         setIsBackendReady(false);
         setTerminalOutput([]);
-        setActiveView((v) => v === 'api' ? 'code' : v);
+        setActiveView((v) => (v === 'api' ? 'code' : v));
         lastPhaseRef.current = null;
         errorWrittenRef.current = null;
     }, [currentProjectId]);
@@ -175,10 +187,10 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     // as sessions service custom events, which arrive on the wire as "sessions terminal:stdout".
     // useSocketEvent('terminal:stdout') would listen for a raw socket event that never fires.
     const PHASE_HEADERS: Record<TerminalPhase, string> = {
-        deps:   '\x1b[33m\x1b[1m── Installing dependencies…\x1b[0m',
-        start:  '\x1b[36m\x1b[1m── Starting server…\x1b[0m',
+        deps: '\x1b[33m\x1b[1m── Installing dependencies…\x1b[0m',
+        start: '\x1b[36m\x1b[1m── Starting server…\x1b[0m',
         server: '\x1b[97m\x1b[1m── Server output\x1b[0m',
-        repair: '\x1b[33m\x1b[1m── Auto-repair\x1b[0m',
+        repair: '\x1b[33m\x1b[1m── Auto-repair\x1b[0m'
     };
 
     useRealtimeUpdates<TerminalStdoutEvent>('sessions', 'terminal:stdout', (event) => {
@@ -193,9 +205,10 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         }
         const shouldApplyPhaseColor = phase !== 'repair' && phase !== 'server';
         const phaseColor = phase === 'deps' ? '\x1b[33m' : phase === 'start' ? '\x1b[36m' : '\x1b[97m';
-        const rawLines = raw.split('\n').filter(Boolean).map((l) =>
-            shouldApplyPhaseColor ? `${phaseColor}${l}\x1b[0m` : l
-        );
+        const rawLines = raw
+            .split('\n')
+            .filter(Boolean)
+            .map((l) => (shouldApplyPhaseColor ? `${phaseColor}${l}\x1b[0m` : l));
         setTerminalOutput((prev) => [...prev, ...lines, ...rawLines]);
     });
 
@@ -211,7 +224,10 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
             lastPhaseRef.current = phase;
             lines.push(PHASE_HEADERS[phase]);
         }
-        const rawLines = raw.split('\n').filter(Boolean).map((l) => `\x1b[91m${l}\x1b[0m`);
+        const rawLines = raw
+            .split('\n')
+            .filter(Boolean)
+            .map((l) => `\x1b[91m${l}\x1b[0m`);
         setTerminalOutput((prev) => [...prev, ...lines, ...rawLines]);
     });
 
@@ -314,11 +330,14 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         else router.push(page === 'dashboard' ? '/dashboard' : '/workspace');
     };
 
-    const handleRenameProject = useCallback(async (name: string) => {
-        if (!currentProjectId) return;
-        await updateProject(currentProjectId, { name });
-        setProjectName(name);
-    }, [currentProjectId, updateProject]);
+    const handleRenameProject = useCallback(
+        async (name: string) => {
+            if (!currentProjectId) return;
+            await updateProject(currentProjectId, { name });
+            setProjectName(name);
+        },
+        [currentProjectId, updateProject]
+    );
 
     const handleFileSelect = useCallback(
         async (filePath: string) => {
@@ -346,10 +365,13 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         [files, setCurrentFile, openTab]
     );
 
-    const handleContentChange = useCallback((value: string | undefined) => {
-        setSelectedFileContent(value || '');
-        if (selectedFile) markDirty(selectedFile);
-    }, [selectedFile, markDirty]);
+    const handleContentChange = useCallback(
+        (value: string | undefined) => {
+            setSelectedFileContent(value || '');
+            if (selectedFile) markDirty(selectedFile);
+        },
+        [selectedFile, markDirty]
+    );
 
     const handleFilesChanged = useCallback(async () => {
         if (!currentProjectId) return;
@@ -368,17 +390,17 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                 key: currentFile.key,
                 uploadId: initiated.uploadId,
                 partNumber: 1,
-                content: base64 as unknown as Buffer,
+                content: base64 as unknown as Buffer
             });
             // Step 3: Complete multipart upload
             await updateUpload('upload', {
                 key: currentFile.key,
                 uploadId: initiated.uploadId,
-                parts: [{ ETag, PartNumber: 1 }],
+                parts: [{ ETag, PartNumber: 1 }]
             });
             await updateFile(currentFile._id, {
                 size: contentBytes.length,
-                currentVersion: (currentFile.currentVersion || 1) + 1,
+                currentVersion: (currentFile.currentVersion || 1) + 1
             });
             toast.success(`Saved: ${currentFile.name}`);
             if (selectedFile) markClean(selectedFile);
@@ -443,38 +465,65 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         [currentProjectId, deleteSnapshot, refreshSnapshots]
     );
 
-    const handleTabSelect = useCallback((tabId: string) => {
-        setActiveTab(tabId);
-        handleFileSelect(tabId);
-    }, [setActiveTab, handleFileSelect]);
+    const handleTabSelect = useCallback(
+        (tabId: string) => {
+            setActiveTab(tabId);
+            handleFileSelect(tabId);
+        },
+        [setActiveTab, handleFileSelect]
+    );
 
-    const handleTabClose = useCallback((tabId: string) => {
-        const nextId = closeTab(tabId);
-        if (nextId) {
-            handleFileSelect(nextId);
-        } else {
-            setSelectedFile(null);
-            setSelectedFileContent('');
-        }
-    }, [closeTab, handleFileSelect]);
+    const handleTabClose = useCallback(
+        (tabId: string) => {
+            const nextId = closeTab(tabId);
+            if (nextId) {
+                handleFileSelect(nextId);
+            } else {
+                setSelectedFile(null);
+                setSelectedFileContent('');
+            }
+        },
+        [closeTab, handleFileSelect]
+    );
 
     useEffect(() => {
         if (!isBrowser) return;
         const handler = (e: KeyboardEvent) => {
             const isMeta = e.metaKey || e.ctrlKey;
-            if (isMeta && e.key === 's') { e.preventDefault(); handleSaveFile(); }
-            if (isMeta && e.key === 'b') { e.preventDefault(); setSidebarView((prev) => (prev === 'files' ? 'ai' : 'files')); }
-            if (isMeta && e.key === 'j') { e.preventDefault(); setIsTerminalOpen((prev) => !prev); }
-            if (isMeta && e.shiftKey && e.key === 'M') { e.preventDefault(); setSidebarView('ai'); }
-            if (isMeta && e.key === 'w') { e.preventDefault(); if (activeTabId) handleTabClose(activeTabId); }
-            if (isMeta && e.key === 'p') { e.preventDefault(); setQuickOpenOpen(true); }
+            if (isMeta && e.key === 's') {
+                e.preventDefault();
+                handleSaveFile();
+            }
+            if (isMeta && e.key === 'b') {
+                e.preventDefault();
+                setSidebarView((prev) => (prev === 'files' ? 'ai' : 'files'));
+            }
+            if (isMeta && e.key === 'j') {
+                e.preventDefault();
+                setIsTerminalOpen((prev) => !prev);
+            }
+            if (isMeta && e.shiftKey && e.key === 'M') {
+                e.preventDefault();
+                setSidebarView('ai');
+            }
+            if (isMeta && e.key === 'w') {
+                e.preventDefault();
+                if (activeTabId) handleTabClose(activeTabId);
+            }
+            if (isMeta && e.key === 'p') {
+                e.preventDefault();
+                setQuickOpenOpen(true);
+            }
         };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
     }, [handleSaveFile, isBrowser, activeTabId, handleTabClose]);
 
     const handleDownload = useCallback(async () => {
-        if (!currentProjectId) { toast.error('No project selected'); return; }
+        if (!currentProjectId) {
+            toast.error('No project selected');
+            return;
+        }
         setIsDownloading(true);
         try {
             const result = await downloadProject({ projectId: currentProjectId });
@@ -499,7 +548,10 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     }, [currentProjectId]);
 
     const handleRunBackend = useCallback(async () => {
-        if (!currentProjectId) { toast.error('No project selected'); return; }
+        if (!currentProjectId) {
+            toast.error('No project selected');
+            return;
+        }
         if (isRunning) return;
 
         setIsRunning(true);
@@ -537,8 +589,13 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         }
     }, [currentSession, stopSession]);
 
-    const handleBackToDashboard = useCallback(() => { resetState(); router.push('/dashboard'); }, [resetState, router]);
-    const handleRetry = useCallback(() => { resetState(); }, [resetState]);
+    const handleBackToDashboard = useCallback(() => {
+        resetState();
+        router.push('/dashboard');
+    }, [resetState, router]);
+    const handleRetry = useCallback(() => {
+        resetState();
+    }, [resetState]);
 
     useEffect(() => {
         if (!isBrowser) return;
@@ -636,7 +693,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
 
             <div className="flex-1 flex overflow-hidden">
                 <ResizablePanelGroup direction="horizontal" className="flex-1">
-                    <ResizablePanel defaultSize={25} minSize={15}>
+                    <ResizablePanel defaultSize={'15%'} minSize={'10%'} maxSize={'40%'}>
                         <WorkspaceSidebar
                             sidebarView={sidebarView}
                             onSidebarViewChange={setSidebarView}
@@ -693,22 +750,13 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
             </div>
 
             {activeView === 'code' && (
-                <Button
-                    onClick={() => setIsTerminalOpen((prev) => !prev)}
-                    className="fixed bottom-4 right-4 h-10 bg-black hover:bg-zinc-800 text-white shadow-lg z-40"
-                >
+                <Button onClick={() => setIsTerminalOpen((prev) => !prev)} className="fixed bottom-4 right-4 h-10 bg-black hover:bg-zinc-800 text-white shadow-lg z-40">
                     <TerminalIcon className="w-4 h-4 mr-2" />
                     {isTerminalOpen ? 'Hide Terminal' : 'Terminal'}
                 </Button>
             )}
 
-            <QuickOpen
-                open={quickOpenOpen}
-                onOpenChange={setQuickOpenOpen}
-                files={flatFiles}
-                recentFiles={recentFiles}
-                onSelect={handleFileSelect}
-            />
+            <QuickOpen open={quickOpenOpen} onOpenChange={setQuickOpenOpen} files={flatFiles} recentFiles={recentFiles} onSelect={handleFileSelect} />
 
             <WorkspaceStatusBar
                 currentProject={currentProject}
@@ -724,10 +772,23 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
 function getLanguageFromFileName(fileName: string): string {
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
     const map: Record<string, string> = {
-        ts: 'TypeScript', tsx: 'TypeScript', js: 'JavaScript', jsx: 'JavaScript',
-        py: 'Python', json: 'JSON', css: 'CSS', scss: 'SCSS', html: 'HTML',
-        md: 'Markdown', yaml: 'YAML', yml: 'YAML', sh: 'Shell', go: 'Go',
-        rs: 'Rust', java: 'Java', sql: 'SQL'
+        ts: 'TypeScript',
+        tsx: 'TypeScript',
+        js: 'JavaScript',
+        jsx: 'JavaScript',
+        py: 'Python',
+        json: 'JSON',
+        css: 'CSS',
+        scss: 'SCSS',
+        html: 'HTML',
+        md: 'Markdown',
+        yaml: 'YAML',
+        yml: 'YAML',
+        sh: 'Shell',
+        go: 'Go',
+        rs: 'Rust',
+        java: 'Java',
+        sql: 'SQL'
     };
     return map[ext] || ext.toUpperCase() || 'Plain Text';
 }

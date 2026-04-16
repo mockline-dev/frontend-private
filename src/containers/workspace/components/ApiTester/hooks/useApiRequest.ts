@@ -1,5 +1,6 @@
 'use client';
 
+import feathersClient from '@/services/featherClient';
 import { useCallback, useRef, useState } from 'react';
 import type { ApiResponse, RequestState, RequestStatus } from '../types';
 import { buildRequest } from '../utils/requestBuilder';
@@ -25,51 +26,67 @@ export function useApiRequest(endpointHeaders?: Record<string, string> | null): 
     const retryCountRef = useRef(0);
     const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const sendRequest = useCallback(async (state: RequestState) => {
-        // Cancel any in-flight request or pending retry
-        abortControllerRef.current?.abort();
-        if (retryTimerRef.current !== null) {
-            clearTimeout(retryTimerRef.current);
-            retryTimerRef.current = null;
-        }
-        retryCountRef.current = 0;
-
-        const controller = new AbortController();
-        abortControllerRef.current = controller;
-        setStatus('loading');
-        setError(null);
-
-        const attempt = async () => {
-            const startTime = Date.now();
-            try {
-                const { url, init } = buildRequest(state, endpointHeaders);
-                const res = await fetch(url, { ...init, signal: controller.signal });
-                const parsed = await parseResponse(res, startTime);
-
-                if (parsed.status === 409 && retryCountRef.current < MAX_409_RETRIES) {
-                    retryCountRef.current++;
-                    setStatus('loading');
-                    retryTimerRef.current = setTimeout(() => {
-                        retryTimerRef.current = null;
-                        void attempt();
-                    }, RETRY_409_DELAY_MS);
-                    return;
-                }
-
-                setResponse(parsed);
-                setStatus('success');
-            } catch (err) {
-                if (err instanceof Error && err.name === 'AbortError') {
-                    setStatus('idle');
-                } else {
-                    setError(err instanceof Error ? err.message : 'Request failed');
-                    setStatus('error');
-                }
+    const sendRequest = useCallback(
+        async (state: RequestState) => {
+            // Cancel any in-flight request or pending retry
+            abortControllerRef.current?.abort();
+            if (retryTimerRef.current !== null) {
+                clearTimeout(retryTimerRef.current);
+                retryTimerRef.current = null;
             }
-        };
+            retryCountRef.current = 0;
 
-        await attempt();
-    }, []);
+            const controller = new AbortController();
+            abortControllerRef.current = controller;
+            setStatus('loading');
+            setError(null);
+
+            const attempt = async () => {
+                const startTime = Date.now();
+                try {
+                    const relayMode = /\/api-test\//i.test(state.url);
+                    const { url, init } = buildRequest(state, relayMode ? null : endpointHeaders);
+                    const fetchHeaders = new Headers(init.headers ?? {});
+
+                    // Requests to backend relay require user JWT.
+                    if (relayMode) {
+                        try {
+                            const token = await feathersClient.authentication.getAccessToken();
+                            if (token) fetchHeaders.set('Authorization', `Bearer ${token}`);
+                        } catch {
+                            // Keep request flow; backend will return auth error if token is required.
+                        }
+                    }
+
+                    const res = await fetch(url, { ...init, headers: fetchHeaders, signal: controller.signal });
+                    const parsed = await parseResponse(res, startTime);
+
+                    if (parsed.status === 409 && retryCountRef.current < MAX_409_RETRIES) {
+                        retryCountRef.current++;
+                        setStatus('loading');
+                        retryTimerRef.current = setTimeout(() => {
+                            retryTimerRef.current = null;
+                            void attempt();
+                        }, RETRY_409_DELAY_MS);
+                        return;
+                    }
+
+                    setResponse(parsed);
+                    setStatus('success');
+                } catch (err) {
+                    if (err instanceof Error && err.name === 'AbortError') {
+                        setStatus('idle');
+                    } else {
+                        setError(err instanceof Error ? err.message : 'Request failed');
+                        setStatus('error');
+                    }
+                }
+            };
+
+            await attempt();
+        },
+        [endpointHeaders]
+    );
 
     const cancelRequest = useCallback(() => {
         abortControllerRef.current?.abort();

@@ -1,6 +1,7 @@
 'use client';
 
 import { EditorTabs } from '@/components/custom/EditorTabs';
+import { EmptyEditor } from '@/components/custom/EmptyEditor';
 import { MonacoEditor } from '@/components/custom/MonacoEditor';
 import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
@@ -8,7 +9,6 @@ import { ApiTester } from '@/containers/workspace/components/ApiTester';
 import { Breadcrumbs } from '@/containers/workspace/components/Breadcrumbs';
 import { Terminal } from '@/containers/workspace/components/Terminal';
 import type { ActiveView, CursorPosition, EditorTab } from '@/types/workspace';
-import { EmptyEditor } from '@/components/custom/EmptyEditor';
 import { Code2, Loader2, Play, Save, Square } from 'lucide-react';
 
 interface EditorPanelProps {
@@ -73,7 +73,7 @@ export function EditorPanel({
     tabs,
     activeTabId,
     onSelectTab,
-    onCloseTab,
+    onCloseTab
 }: EditorPanelProps) {
     return (
         <ResizablePanelGroup key={isTerminalOpen ? 'terminal-open' : 'terminal-closed'} direction="vertical" className="h-full">
@@ -99,7 +99,12 @@ export function EditorPanel({
                                             Stop
                                         </Button>
                                     ) : (
-                                        <Button onClick={onRunBackend} disabled={!currentProjectId || isRunning} size="sm" className="h-7 text-xs bg-green-600 hover:bg-green-700">
+                                        <Button
+                                            onClick={onRunBackend}
+                                            disabled={!currentProjectId || isRunning}
+                                            size="sm"
+                                            className="h-7 text-xs bg-green-600 hover:bg-green-700"
+                                        >
                                             {isRunning ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Play className="w-3 h-3 mr-1" />}
                                             {isRunning ? 'Starting...' : 'Run Backend'}
                                         </Button>
@@ -130,6 +135,7 @@ export function EditorPanel({
                         </>
                     ) : (
                         <ApiTester
+                            sessionId={sessionId ?? null}
                             sessionProxyUrl={sessionProxyUrl ?? null}
                             sessionEndpointHeaders={sessionEndpointHeaders ?? null}
                             isSessionRunning={isBackendReady}
@@ -143,7 +149,20 @@ export function EditorPanel({
                 <>
                     <ResizableHandle className="h-1 bg-border hover:bg-blue-400 transition-colors cursor-row-resize" />
                     <ResizablePanel minSize={15} defaultSize={30}>
-                        <Terminal variant="panel" isOpen={true} onClose={onTerminalClose} projectId={currentProjectId} sessionId={sessionId} sessionStatus={sessionStatus} failureType={failureType} sessionOutput={terminalOutput} {...(repairStatus != null ? { repairStatus } : {})} {...(repairAttempt ? { repairAttempt } : {})} {...(repairMaxAttempts ? { repairMaxAttempts } : {})} {...(onTerminalRetry ? { onRetry: onTerminalRetry } : {})} />
+                        <Terminal
+                            variant="panel"
+                            isOpen={true}
+                            onClose={onTerminalClose}
+                            projectId={currentProjectId}
+                            sessionId={sessionId}
+                            sessionStatus={sessionStatus}
+                            failureType={failureType}
+                            sessionOutput={terminalOutput}
+                            {...(repairStatus != null ? { repairStatus } : {})}
+                            {...(repairAttempt ? { repairAttempt } : {})}
+                            {...(repairMaxAttempts ? { repairMaxAttempts } : {})}
+                            {...(onTerminalRetry ? { onRetry: onTerminalRetry } : {})}
+                        />
                     </ResizablePanel>
                 </>
             )}

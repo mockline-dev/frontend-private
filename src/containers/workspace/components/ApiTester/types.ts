@@ -68,6 +68,7 @@ export interface RequestState {
 }
 
 export interface ApiTesterProps {
+    sessionId?: string | null;
     sessionProxyUrl: string | null;
     sessionEndpointHeaders?: Record<string, string> | null;
     isSessionRunning: boolean;

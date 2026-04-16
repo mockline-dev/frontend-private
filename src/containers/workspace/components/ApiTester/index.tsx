@@ -1,7 +1,8 @@
 'use client';
 
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { Button } from '@/components/ui/button';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
+import { backendUrl } from '@/config/environment';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { EmptyState } from './components/EmptyState';
 import { EndpointSidebar } from './components/EndpointSidebar';
@@ -14,24 +15,19 @@ import { useOpenApiSpec } from './hooks/useOpenApiSpec';
 import { useRequestCollection } from './hooks/useRequestCollection';
 import type { ApiTesterProps } from './types';
 
-export function ApiTester({ sessionProxyUrl, sessionEndpointHeaders, isSessionRunning, onRunBackend, isRunning }: ApiTesterProps) {
-    const specUrl = sessionProxyUrl ? `${sessionProxyUrl}/openapi.json` : undefined;
-    const baseUrl = sessionProxyUrl ?? '';
+function buildRelayBaseUrl(sessionId?: string | null): string | null {
+    if (!sessionId) return null;
+    return `${backendUrl.replace(/\/$/, '')}/api-test/${sessionId}`;
+}
 
-    const { groups, loading, error, refetch } = useOpenApiSpec(isSessionRunning ? specUrl : undefined, sessionEndpointHeaders);
+export function ApiTester({ sessionId, sessionProxyUrl, sessionEndpointHeaders, isSessionRunning, onRunBackend, isRunning }: ApiTesterProps) {
+    const relayBaseUrl = buildRelayBaseUrl(sessionId);
+    const baseUrl = relayBaseUrl ?? sessionProxyUrl ?? '';
 
-    const {
-        selectedEndpoint,
-        requestState,
-        selectEndpoint,
-        updateMethod,
-        updateUrl,
-        updateParams,
-        updateHeaders,
-        updateBody,
-        updateContentType,
-        updateAuth,
-    } = useRequestCollection(groups, baseUrl);
+    const { groups, loading, error, refetch } = useOpenApiSpec(isSessionRunning ? baseUrl : undefined, sessionEndpointHeaders);
+
+    const { selectedEndpoint, requestState, selectEndpoint, updateMethod, updateUrl, updateParams, updateHeaders, updateBody, updateContentType, updateAuth } =
+        useRequestCollection(groups, baseUrl);
 
     const { response, status, error: requestError, sendRequest, cancelRequest } = useApiRequest(sessionEndpointHeaders);
 
@@ -75,11 +71,7 @@ export function ApiTester({ sessionProxyUrl, sessionEndpointHeaders, isSessionRu
 
             <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
                 <ResizablePanel defaultSize={22} minSize={15} maxSize={35}>
-                    <EndpointSidebar
-                        groups={groups}
-                        selectedEndpointId={selectedEndpoint?.id ?? null}
-                        onSelect={(ep) => selectEndpoint(ep, baseUrl)}
-                    />
+                    <EndpointSidebar groups={groups} selectedEndpointId={selectedEndpoint?.id ?? null} onSelect={(ep) => selectEndpoint(ep, baseUrl)} />
                 </ResizablePanel>
 
                 <ResizableHandle className="w-1 bg-zinc-200 hover:bg-blue-400 transition-colors cursor-col-resize" />

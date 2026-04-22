@@ -24,6 +24,7 @@ interface TerminalProps {
     variant?: 'panel' | 'floating';
     onClear?: (() => void) | undefined;
     onRetry?: (() => void) | undefined;
+    onStop?: (() => void) | undefined;
     repairStatus?: 'analyzing' | 'applying' | 'completed' | 'failed' | null;
     repairAttempt?: number;
     repairMaxAttempts?: number;
@@ -101,6 +102,7 @@ export function Terminal({
     variant = 'panel',
     onClear,
     onRetry,
+    onStop,
     repairStatus,
     repairAttempt,
     repairMaxAttempts,
@@ -230,6 +232,17 @@ export function Terminal({
                     </div>
 
                     <div className="flex items-center gap-0.5">
+                        {(sessionStatus === 'starting' || sessionStatus === 'repairing') && onStop && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-amber-400 hover:text-amber-200 hover:bg-zinc-800"
+                                onClick={onStop}
+                                title="Stop — cancel startup"
+                            >
+                                <Square className="w-3 h-3" />
+                            </Button>
+                        )}
                         {sessionStatus === 'error' && onRetry && (
                             <Button
                                 variant="ghost"
@@ -346,4 +359,4 @@ export function Terminal({
 }
 
 // Re-export unused named imports from old API so existing call sites don't break
-export { Zap as _unused1, Square as _unused2 };
+export { Zap as _unused1 };

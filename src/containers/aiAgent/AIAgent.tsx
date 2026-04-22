@@ -24,7 +24,7 @@ const suggestedPrompts = [
 ];
 
 export function AiAgent({ projectId, onFilesChanged }: AIAgentProps) {
-    const { messages, hasOlderMessages, isLoadingOlderMessages, input, setInput, isLoading, isStreaming, pipelineStage, retryingMessageId, handleSubmit, retryMessage, loadOlderMessages, stopStream } =
+    const { messages, hasOlderMessages, isLoadingOlderMessages, input, setInput, isLoading, isStreaming, pipelineStage, pipelineProgress, retryingMessageId, handleSubmit, retryMessage, loadOlderMessages, stopStream } =
         useAIAgent({ ...(projectId ? { projectId } : {}), ...(onFilesChanged ? { onFilesChanged } : {}) });
 
     const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -112,6 +112,10 @@ export function AiAgent({ projectId, onFilesChanged }: AIAgentProps) {
                 {messages.map((message) => {
                     // ── System message — full-width status banner ────────────────
                     if (message.role === 'system') {
+                        // Skip system messages that have no content and no recognisable type —
+                        // these are internal bookkeeping entries that shouldn't appear in the chat.
+                        if (!message.content?.trim() && !message.metadata?.type) return null;
+
                         const mtype = message.metadata?.type as string | undefined;
                         const isRepairStart    = mtype === 'repair-start';
                         const isRepairProgress = mtype === 'repair-progress';
@@ -278,13 +282,25 @@ export function AiAgent({ projectId, onFilesChanged }: AIAgentProps) {
                         <div className="w-7 h-7 bg-linear-to-br from-violet-500 to-purple-600 rounded-lg flex items-center justify-center">
                             <Sparkles className="w-3.5 h-3.5 text-white" />
                         </div>
-                        <div className="bg-white border border-gray-200 rounded-2xl px-3 py-2 shadow-xs">
-                            <div className="flex items-center gap-1.5">
+                        <div className="bg-white border border-gray-200 rounded-2xl px-3 py-2 shadow-xs min-w-[160px]">
+                            <div className="flex items-center gap-1.5 mb-1">
                                 <span className="w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:-0.2s]" />
                                 <span className="w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce [animation-delay:-0.1s]" />
                                 <span className="w-1.5 h-1.5 rounded-full bg-gray-500 animate-bounce" />
                                 {pipelineStage && <span className="text-xs text-gray-600 ml-1">{pipelineStage}</span>}
                             </div>
+                            {pipelineProgress > 0 && (
+                                <div className="w-full bg-gray-100 rounded-full h-1 overflow-hidden">
+                                    <div
+                                        className="bg-violet-500 h-1 rounded-full transition-all duration-500 ease-out"
+                                        style={{ width: `${pipelineProgress}%` }}
+                                        role="progressbar"
+                                        aria-valuenow={pipelineProgress}
+                                        aria-valuemin={0}
+                                        aria-valuemax={100}
+                                    />
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}

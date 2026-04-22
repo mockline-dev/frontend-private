@@ -162,6 +162,7 @@ export function EditorPanel({
                             {...(repairAttempt ? { repairAttempt } : {})}
                             {...(repairMaxAttempts ? { repairMaxAttempts } : {})}
                             {...(onTerminalRetry ? { onRetry: onTerminalRetry } : {})}
+                            {...(onStopBackend ? { onStop: onStopBackend } : {})}
                         />
                     </ResizablePanel>
                 </>

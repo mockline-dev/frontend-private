@@ -2,7 +2,7 @@
 
 import { createMessage as createMessageAction } from '@/api/messages/createMessage';
 import { fetchMessages } from '@/api/messages/fetchMessages';
-import { type Message, type OrchestrationCompletedEvent, type OrchestrationErrorEvent, type OrchestrationIntentEvent, type OrchestrationTokenEvent, type FilesPersistedEvent } from '@/types/feathers';
+import { type Message, type OrchestrationCompletedEvent, type OrchestrationErrorEvent, type OrchestrationIntentEvent, type OrchestrationTokenEvent, type FilesPersistedEvent, type ProgressStageEvent } from '@/types/feathers';
 import { useCallback, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useRealtimeUpdates, useSocketEvent } from './useRealtimeUpdates';
@@ -13,6 +13,18 @@ const OLDER_MESSAGES_BATCH_SIZE = 50;
 /** Placeholder ID for the in-flight streaming message shown in the UI. */
 const STREAMING_MESSAGE_ID = '__streaming__';
 
+/** Human-readable labels for each backend pipeline stage. */
+const PIPELINE_STAGE_LABELS: Record<string, string> = {
+    classifying: 'Classifying intent…',
+    enhancing:   'Enhancing prompt…',
+    retrieving:  'Retrieving context…',
+    generating:  'Generating code…',
+    validating:  'Validating in sandbox…',
+    fixing:      'Auto-fixing issues…',
+    persisting:  'Persisting files…',
+    complete:    'Complete',
+};
+
 export interface UseAIAgentReturn {
     messages: Message[];
     hasOlderMessages: boolean;
@@ -21,8 +33,10 @@ export interface UseAIAgentReturn {
     setInput: (value: string) => void;
     isLoading: boolean;
     isStreaming: boolean;
-    /** Current orchestration pipeline stage, e.g. 'classifying' | 'enhancing' | 'generating' | 'persisting' | null */
+    /** Current orchestration pipeline stage label, e.g. 'Generating code…' */
     pipelineStage: string | null;
+    /** Current pipeline progress percentage (0-100), driven by progress:stage events */
+    pipelineProgress: number;
     retryingMessageId: string | null;
     handleSubmit: (content?: string) => Promise<void>;
     retryMessage: (messageId: string) => Promise<void>;
@@ -52,6 +66,7 @@ export function useAIAgent({
     const [isLoading, setIsLoading] = useState(false);
     const [isStreaming, setIsStreaming] = useState(false);
     const [pipelineStage, setPipelineStage] = useState<string | null>(null);
+    const [pipelineProgress, setPipelineProgress] = useState(0);
     const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
 
     const streamingContentRef = useRef('');
@@ -136,6 +151,7 @@ export function useAIAgent({
             const trimmed = content.trim();
             setIsLoading(true);
             setPipelineStage(null);
+            setPipelineProgress(0);
             streamingContentRef.current = '';
 
             // Optimistically add user message
@@ -192,6 +208,7 @@ export function useAIAgent({
     const stopStream = useCallback(() => {
         setIsStreaming(false);
         setPipelineStage(null);
+        setPipelineProgress(0);
         streamingContentRef.current = '';
         setMessages((prev) => prev.filter((m) => m._id !== STREAMING_MESSAGE_ID));
     }, []);
@@ -214,6 +231,7 @@ export function useAIAgent({
         if (message.role === 'assistant') {
             setIsStreaming(false);
             setPipelineStage(null);
+            setPipelineProgress(0);
             streamingContentRef.current = '';
         }
     });
@@ -265,8 +283,16 @@ export function useAIAgent({
         toast.error(`Generation failed: ${error}`);
         setIsStreaming(false);
         setPipelineStage(null);
+        setPipelineProgress(0);
         streamingContentRef.current = '';
         setMessages((prev) => prev.filter((m) => m._id !== STREAMING_MESSAGE_ID));
+    });
+
+    // Granular pipeline stage events — emitted by both orchestrator.ts and the worker for all intents
+    // (including code/tool-calling intents that don't emit orchestration:token).
+    useSocketEvent<ProgressStageEvent>('progress:stage', ({ stage, percentage }) => {
+        setPipelineStage(PIPELINE_STAGE_LABELS[stage] ?? stage);
+        setPipelineProgress(percentage);
     });
 
     useSocketEvent<FilesPersistedEvent>('files:persisted', () => {
@@ -283,6 +309,7 @@ export function useAIAgent({
         isLoading,
         isStreaming,
         pipelineStage,
+        pipelineProgress,
         retryingMessageId,
         handleSubmit,
         retryMessage,

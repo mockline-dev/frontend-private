@@ -3,9 +3,10 @@
 import { createSession as createSessionAction } from '@/api/sessions/createSession';
 import { deleteSession as deleteSessionAction } from '@/api/sessions/deleteSession';
 import { fetchSessions } from '@/api/sessions/fetchSessions';
-import { CreateSessionData, Session, SessionQuery } from '@/types/feathers';
-import { useCallback, useState } from 'react';
+import { CreateSessionData, Session } from '@/types/feathers';
+import { useCallback, useEffect, useState } from 'react';
 import { useRealtimeUpdates } from './useRealtimeUpdates';
+import feathersClient from '@/services/featherClient';
 
 export interface UseSessionsReturn {
     sessions: Session[];
@@ -115,6 +116,29 @@ export function useSessions(): UseSessionsReturn {
         setSessions((prev) => prev.filter((s) => s._id !== session._id));
         setCurrentSession((prev) => (prev?._id === session._id ? null : prev));
     });
+
+    // Polling fallback: when a session is stuck in 'starting' or 'repairing', Socket.IO channel
+    // events can be missed (e.g. on reconnection). Poll every 5s to ensure the UI always reflects
+    // the true status even if the realtime event was dropped.
+    useEffect(() => {
+        if (!isBrowser) return;
+        if (!currentSession || !['starting', 'repairing'].includes(currentSession.status)) return;
+
+        const sessionId = currentSession._id;
+        const interval = setInterval(async () => {
+            try {
+                const latest = await feathersClient.service('sessions').get(sessionId) as Session;
+                if (latest && latest.status !== currentSession.status) {
+                    setSessions((prev) => prev.map((s) => (s._id === latest._id ? latest : s)));
+                    setCurrentSession(latest);
+                }
+            } catch {
+                // Non-fatal — socket events are the primary mechanism; polling is a safety net.
+            }
+        }, 5000);
+
+        return () => clearInterval(interval);
+    }, [currentSession?._id, currentSession?.status, isBrowser]);
 
     const isSessionRunning = currentSession?.status === 'running';
     const sessionProxyUrl = currentSession?.proxyUrl ?? null;

@@ -7,6 +7,7 @@ import { cookies } from 'next/headers';
 
 export interface ProjectsStats {
     total: number;
+    ready: number;
     byStatus: Record<string, number>;
     thisWeek: number;
 }
@@ -40,6 +41,12 @@ export const createFeathersServerClient = async () => {
     const jwt = (await cookies()).get('jwt')?.value;
 
     app.configure(restClient);
+
+    // Register projects service with custom 'stats' method so the REST client
+    // knows to POST to /projects/stats (FeathersJS v5 custom method convention).
+    app.use('projects', restClient.service('projects'), {
+        methods: ['find', 'get', 'create', 'patch', 'remove', 'stats'],
+    });
 
     app.configure(
         authentication({

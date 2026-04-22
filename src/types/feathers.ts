@@ -362,6 +362,12 @@ export interface SandboxRetryEvent {
     error: string;
 }
 
+/** Fired at each stage of the generation pipeline with a percentage for progress UI */
+export interface ProgressStageEvent {
+    stage: 'classifying' | 'enhancing' | 'retrieving' | 'generating' | 'validating' | 'fixing' | 'persisting' | 'complete';
+    percentage: number;
+}
+
 /** Fired with sandbox execution result */
 export interface SandboxResultEvent {
     success: boolean;

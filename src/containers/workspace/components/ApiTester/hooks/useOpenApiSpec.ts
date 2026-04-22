@@ -25,12 +25,14 @@ interface UseOpenApiSpecResult {
     loading: boolean;
     error: string | null;
     refetch: () => void;
+    routeCount: number;
 }
 
 export function useOpenApiSpec(specUrl: string | undefined, endpointHeaders?: Record<string, string> | null): UseOpenApiSpecResult {
     const [groups, setGroups] = useState<EndpointGroup[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [routeCount, setRouteCount] = useState(0);
     const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const retryCountRef = useRef(0);
     const abortRef = useRef<AbortController | null>(null);
@@ -72,6 +74,7 @@ export function useOpenApiSpec(specUrl: string | undefined, endpointHeaders?: Re
             if (!isRetry) {
                 retryCountRef.current = 0;
                 setError(null);
+                setRouteCount(0);
             }
 
             setLoading(true);
@@ -131,7 +134,10 @@ export function useOpenApiSpec(specUrl: string | undefined, endpointHeaders?: Re
                     throw new Error(`${statusHint} (checked: ${candidateUrls.join(', ')})`);
                 }
 
-                setGroups(parseOpenApiSpec(spec));
+                const parsedGroups = parseOpenApiSpec(spec);
+                setGroups(parsedGroups);
+                const totalEndpoints = parsedGroups.reduce((sum, g) => sum + g.endpoints.length, 0);
+                setRouteCount(totalEndpoints);
                 setError(null);
                 setLoading(false);
                 retryCountRef.current = 0;
@@ -165,5 +171,5 @@ export function useOpenApiSpec(specUrl: string | undefined, endpointHeaders?: Re
         };
     }, [fetchSpec]);
 
-    return { groups, loading, error, refetch: () => fetchSpec() };
+    return { groups, loading, error, refetch: () => fetchSpec(), routeCount };
 }

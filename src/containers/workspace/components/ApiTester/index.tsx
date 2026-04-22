@@ -3,7 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { backendUrl } from '@/config/environment';
-import { AlertCircle, RefreshCw } from 'lucide-react';
+import { AlertCircle, AlertTriangle, RefreshCw } from 'lucide-react';
 import { EmptyState } from './components/EmptyState';
 import { EndpointSidebar } from './components/EndpointSidebar';
 import { LoadingState } from './components/LoadingState';
@@ -24,7 +24,7 @@ export function ApiTester({ sessionId, sessionProxyUrl, sessionEndpointHeaders, 
     const relayBaseUrl = buildRelayBaseUrl(sessionId);
     const baseUrl = relayBaseUrl ?? sessionProxyUrl ?? '';
 
-    const { groups, loading, error, refetch } = useOpenApiSpec(isSessionRunning ? baseUrl : undefined, sessionEndpointHeaders);
+    const { groups, loading, error, refetch, routeCount } = useOpenApiSpec(isSessionRunning ? baseUrl : undefined, sessionEndpointHeaders);
 
     const { selectedEndpoint, requestState, selectEndpoint, updateMethod, updateUrl, updateParams, updateHeaders, updateBody, updateContentType, updateAuth } =
         useRequestCollection(groups, baseUrl);
@@ -77,6 +77,13 @@ export function ApiTester({ sessionId, sessionProxyUrl, sessionEndpointHeaders, 
                 <ResizableHandle className="w-1 bg-zinc-200 hover:bg-blue-400 transition-colors cursor-col-resize" />
 
                 <ResizablePanel defaultSize={78}>
+                    {!loading && !error && routeCount > 0 && routeCount < 3 && (
+                        <div className="mx-3 mt-2 flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                            <span>Only {routeCount} route{routeCount !== 1 ? 's' : ''} detected. The server may still be loading or OpenAPI routes may be incomplete.</span>
+                            <button onClick={refetch} className="ml-auto text-xs underline hover:no-underline">Refresh</button>
+                        </div>
+                    )}
                     <ResizablePanelGroup direction="vertical" className="h-full">
                         <ResizablePanel defaultSize={75} minSize={65}>
                             <RequestConfigTabs

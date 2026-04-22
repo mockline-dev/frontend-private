@@ -43,17 +43,23 @@ export function AiAgent({ projectId, onFilesChanged }: AIAgentProps) {
         }
     }, [messages.length, isStreaming]);
 
-    const handleMessagesScroll = async () => {
-        const container = messagesContainerRef.current;
-        if (!container || container.scrollTop > 30 || !hasOlderMessages || isLoadingOlderMessages) return;
+    const scrollDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-        const previousHeight = container.scrollHeight;
-        const previousTop = container.scrollTop;
-        await loadOlderMessages();
-        requestAnimationFrame(() => {
-            const nextHeight = container.scrollHeight;
-            container.scrollTop = nextHeight - previousHeight + previousTop;
-        });
+    const handleMessagesScroll = () => {
+        const container = messagesContainerRef.current;
+        if (!container || !hasOlderMessages || isLoadingOlderMessages) return;
+
+        if (scrollDebounceRef.current) clearTimeout(scrollDebounceRef.current);
+        scrollDebounceRef.current = setTimeout(async () => {
+            if (!container || container.scrollTop > 80 || !hasOlderMessages || isLoadingOlderMessages) return;
+            const previousHeight = container.scrollHeight;
+            const previousTop = container.scrollTop;
+            await loadOlderMessages();
+            requestAnimationFrame(() => {
+                const nextHeight = container.scrollHeight;
+                container.scrollTop = nextHeight - previousHeight + previousTop;
+            });
+        }, 150);
     };
 
     const copyMessage = async (messageId: string, content: string) => {

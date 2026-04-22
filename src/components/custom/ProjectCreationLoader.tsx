@@ -395,10 +395,23 @@ function TimeEstimate({ stageIndex, isActive }: { stageIndex: number; isActive: 
             className="flex items-center gap-1.5 text-[10px] text-white/30"
         >
             <Clock className="w-3 h-3" />
-            <span>{stage.estimatedTime}</span>
+            <span>{stage?.estimatedTime ?? ''}</span>
         </motion.div>
     );
 }
+
+// Mapping from backend currentStage values to UI stage indices
+const BACKEND_STAGE_TO_UI: Record<string, number> = {
+    classifying: 0,
+    enhancing: 0,
+    orchestrating: 0,
+    retrieving: 1,
+    generating: 2,
+    validating: 3,
+    fixing: 3,
+    persisting: 4,
+    complete: 4,
+};
 
 // Main Project Creation Loader Component
 export function ProjectCreationLoader({ 
@@ -418,8 +431,10 @@ export function ProjectCreationLoader({
     const percentage = Math.min(100, Math.round(progress?.percentage || 0));
     const prefersReducedMotion = useReducedMotion();
 
-    const activeStageIndex = Math.min(STAGES.length - 1, Math.floor((percentage / 100) * STAGES.length));
-    const currentStage = STAGES[activeStageIndex];
+    const activeStageIndex = progress?.currentStage
+        ? (BACKEND_STAGE_TO_UI[progress.currentStage] ?? 0)
+        : (status === 'generating' ? 0 : 0);
+    const currentStage = STAGES[activeStageIndex] ?? STAGES[0];
 
     // Animation variants
     const containerVariants = {
@@ -547,7 +562,7 @@ export function ProjectCreationLoader({
                                 {/* Context-aware message */}
                                 {isActive && (
                                     <div className="mb-3">
-                                        <ContextMessage stage={currentStage.key} />
+                                        <ContextMessage stage={currentStage?.key ?? 'analyzing'} />
                                     </div>
                                 )}
 
@@ -674,7 +689,9 @@ export function ProjectCreationLoader({
                                                     </div>
                                                     {isCurrentStage && (
                                                         <p className="text-[10px] text-white/35 mt-0.5 truncate">
-                                                            {stage.description}
+                                                            {stage.key === 'generating' && progress?.currentFile
+                                                                ? progress.currentFile
+                                                                : stage.description}
                                                         </p>
                                                     )}
                                                 </div>

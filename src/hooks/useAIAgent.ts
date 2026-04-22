@@ -56,6 +56,8 @@ export function useAIAgent({
 
     const streamingContentRef = useRef('');
     const initializedRef = useRef(false);
+    const messagesRef = useRef(messages);
+    messagesRef.current = messages;
 
     // -------------------------------------------------------------------------
     // Initial message load
@@ -100,7 +102,7 @@ export function useAIAgent({
     const loadOlderMessages = useCallback(async () => {
         if (!projectId || isLoadingOlderMessages || !hasOlderMessages) return;
 
-        const oldestCreatedAt = messages.find((m) => m._id !== STREAMING_MESSAGE_ID)?.createdAt;
+        const oldestCreatedAt = messagesRef.current.find((m) => m._id !== STREAMING_MESSAGE_ID)?.createdAt;
         if (!oldestCreatedAt) return;
 
         setIsLoadingOlderMessages(true);
@@ -122,7 +124,7 @@ export function useAIAgent({
         } finally {
             setIsLoadingOlderMessages(false);
         }
-    }, [projectId, isLoadingOlderMessages, hasOlderMessages, messages]);
+    }, [projectId, isLoadingOlderMessages, hasOlderMessages]);
 
     // -------------------------------------------------------------------------
     // Send message — triggers full orchestration pipeline via POST /messages

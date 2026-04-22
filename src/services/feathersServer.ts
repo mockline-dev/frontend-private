@@ -37,17 +37,16 @@ export const createFeathersServerClient = async () => {
     };
 
     const app = feathers<ServiceTypes>();
-    const restClient = rest(process.env.NEXT_PUBLIC_SOCKET_URL).fetch(fetch);
+    // Keep transport separate so we can call transport.service() for custom method registration.
+    const transport = rest(process.env.NEXT_PUBLIC_SOCKET_URL);
     const jwt = (await cookies()).get('jwt')?.value;
 
-    app.configure(restClient);
+    app.configure(transport.fetch(fetch));
 
-    // Register projects service with custom 'stats' method so the REST client
-    // knows to POST to /projects/stats (FeathersJS v5 custom method convention).
-    // Must use app.get('connection') — the transport stored by configure() —
-    // not restClient directly (mirrors how projectsClient in projects.shared.ts works).
-    const connection = app.get('connection');
-    app.use('projects', connection.service('projects'), {
+    // Register projects service with custom 'stats' method.
+    // transport.service() is the correct way to create a REST service instance
+    // with custom methods — mirrors the pattern in projects.shared.ts projectsClient().
+    app.use('projects', transport.service('projects'), {
         methods: ['find', 'get', 'create', 'patch', 'remove', 'stats'],
     });
 

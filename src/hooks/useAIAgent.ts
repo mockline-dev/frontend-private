@@ -3,7 +3,7 @@
 import { createMessage as createMessageAction } from '@/api/messages/createMessage';
 import { fetchMessages } from '@/api/messages/fetchMessages';
 import { type Message, type OrchestrationCompletedEvent, type OrchestrationErrorEvent, type OrchestrationIntentEvent, type OrchestrationTokenEvent, type FilesPersistedEvent, type ProgressStageEvent } from '@/types/feathers';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useRealtimeUpdates, useSocketEvent } from './useRealtimeUpdates';
 
@@ -98,18 +98,11 @@ export function useAIAgent({
         }
     }, [projectId]);
 
-    // Trigger initial load when projectId becomes available
-    const loadInitialRef = useRef(loadInitialMessages);
-    loadInitialRef.current = loadInitialMessages;
-    const projectIdRef = useRef(projectId);
-    if (projectIdRef.current !== projectId) {
-        projectIdRef.current = projectId;
+    // Trigger initial load when projectId changes (safe: runs after render)
+    useEffect(() => {
         initializedRef.current = false;
-    }
-    // Call on first render with a projectId
-    if (projectId && !initializedRef.current) {
-        void loadInitialRef.current();
-    }
+        void loadInitialMessages();
+    }, [projectId, loadInitialMessages]);
 
     // -------------------------------------------------------------------------
     // Load older messages (pagination)

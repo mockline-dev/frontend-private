@@ -35,7 +35,7 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
     } = useProjectCreation({
         onSuccess: (project) => {
             options?.onProjectCreated?.(project._id);
-            router.push(`/workspace?projectId=${project._id}`);
+            queueMicrotask(() => router.push(`/workspace?projectId=${project._id}`));
         },
         onError: (error) => {
             toast.error(error);

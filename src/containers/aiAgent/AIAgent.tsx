@@ -41,7 +41,7 @@ export function AiAgent({ projectId, onFilesChanged }: AIAgentProps) {
         if (isNearBottom || isStreaming) {
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         }
-    }, [messages.length, isStreaming]);
+    }, [messages.length, isStreaming, messages[messages.length - 1]?.content]);
 
     const scrollDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -110,9 +110,11 @@ export function AiAgent({ projectId, onFilesChanged }: AIAgentProps) {
                 )}
 
                 {messages.map((message) => {
+                    // Skip empty assistant messages (e.g. from auto-repair that have no content)
+                    if (message.role === 'assistant' && !message.content?.trim()) return null;
+
                     // ── System message — full-width status banner ────────────────
                     if (message.role === 'system') {
-                        // Skip system messages that have no content and no recognisable type —
                         // these are internal bookkeeping entries that shouldn't appear in the chat.
                         if (!message.content?.trim() && !message.metadata?.type) return null;
 

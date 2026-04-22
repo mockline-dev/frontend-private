@@ -94,7 +94,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
             setProjectName(project.name);
             sessionStorage.setItem('currentProjectId', project._id);
             sessionStorage.setItem('projectInitialized', 'true');
-            router.replace(`/workspace?projectId=${project._id}`);
+            queueMicrotask(() => router.replace(`/workspace?projectId=${project._id}`));
         },
         onError: (error) => {
             toast.error(error);

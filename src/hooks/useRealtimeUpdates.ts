@@ -53,9 +53,11 @@ export const useRealtimeUpdates = <T>(
             service.removeListener(eventType, handler);
             service.on(eventType, handler);
 
-            feathersClient.reAuthenticate().catch((error) => {
-                // Token may be missing in public routes; listeners are still attached.
-                console.debug(`[useRealtimeUpdates] Re-auth skipped for ${serviceName}:`, error);
+            queueMicrotask(() => {
+                feathersClient.reAuthenticate().catch((error) => {
+                    // Token may be missing in public routes; listeners are still attached.
+                    console.debug(`[useRealtimeUpdates] Re-auth skipped for ${serviceName}:`, error);
+                });
             });
         };
 

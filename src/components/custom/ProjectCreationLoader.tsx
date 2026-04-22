@@ -430,6 +430,7 @@ export function ProjectCreationLoader({
     const isReady = status === 'ready';
     const percentage = Math.min(100, Math.round(progress?.percentage || 0));
     const prefersReducedMotion = useReducedMotion();
+    const [showErrorDetails, setShowErrorDetails] = useState(false);
 
     const activeStageIndex = progress?.currentStage
         ? (BACKEND_STAGE_TO_UI[progress.currentStage] ?? 0)
@@ -488,7 +489,7 @@ export function ProjectCreationLoader({
                 variants={containerVariants} 
                 initial="hidden" 
                 animate="visible" 
-                className="relative w-full max-w-md"
+                className="relative w-full max-w-lg min-h-[480px]"
             >
                 {/* Border glow */}
                 <AnimatePresence>
@@ -524,8 +525,8 @@ export function ProjectCreationLoader({
                                     {isError ? 'Build failed' : isReady ? 'Ready to code' : 'Building your project'}
                                 </h1>
                                 {project?.name && (
-                                    <p className="text-[12px] text-white/35 mt-1 font-mono truncate max-w-[280px]">
-                                        {project.name.slice(0, 45)}
+                                    <p className="text-[12px] text-white/35 mt-1 font-mono truncate max-w-[340px]">
+                                        {project.name}
                                     </p>
                                 )}
                             </div>
@@ -561,7 +562,7 @@ export function ProjectCreationLoader({
                             <div className="mb-5">
                                 {/* Context-aware message */}
                                 {isActive && (
-                                    <div className="mb-3">
+                                    <div className="mb-3 min-h-[24px]">
                                         <ContextMessage stage={currentStage?.key ?? 'analyzing'} />
                                     </div>
                                 )}
@@ -688,7 +689,7 @@ export function ProjectCreationLoader({
                                                         )}
                                                     </div>
                                                     {isCurrentStage && (
-                                                        <p className="text-[10px] text-white/35 mt-0.5 truncate">
+                                                        <p className="text-[10px] text-white/35 mt-0.5 break-all line-clamp-2">
                                                             {stage.key === 'generating' && progress?.currentFile
                                                                 ? progress.currentFile
                                                                 : stage.description}
@@ -703,18 +704,13 @@ export function ProjectCreationLoader({
                         )}
 
                         {/* File skeleton preview */}
-                        {isActive && (
+                        {isActive && (currentStage?.key === 'generating' || currentStage?.key === 'validating') && (
                             <div className="mb-5">
                                 <div className="flex items-center justify-between mb-3">
                                     <div className="flex items-center gap-2">
                                         <Terminal className="w-3.5 h-3.5 text-white/40" />
                                         <span className="text-[11px] text-white/40 font-medium">Generating files...</span>
                                     </div>
-                                    {progress && progress.totalFiles > 0 && (
-                                        <span className="text-[11px] font-mono font-semibold text-white/60">
-                                            {progress.filesGenerated} <span className="text-white/25">/</span> {progress.totalFiles}
-                                        </span>
-                                    )}
                                 </div>
                                 <div className="space-y-2">
                                     {[0, 1, 2].map((i) => (
@@ -792,10 +788,7 @@ export function ProjectCreationLoader({
                                 {/* Expandable error details */}
                                 <div className="border-t border-red-500/8">
                                     <button
-                                        onClick={() => {
-                                            const details = document.getElementById('error-details');
-                                            details?.classList.toggle('hidden');
-                                        }}
+                                        onClick={() => setShowErrorDetails(prev => !prev)}
                                         className="w-full px-4 py-2.5 flex items-center justify-between text-[11px] text-red-400/70 hover:text-red-400 hover:bg-red-500/5 transition-colors"
                                     >
                                         <span className="flex items-center gap-2">
@@ -808,7 +801,8 @@ export function ProjectCreationLoader({
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                         </svg>
                                     </button>
-                                    <div id="error-details" className="hidden px-4 pb-4 space-y-2.5">
+                                    {showErrorDetails && (
+                                        <div className="px-4 pb-4 space-y-2.5">
                                         <div className="bg-red-950/25 rounded-lg p-3">
                                             <p className="text-[10px] text-red-400/60 font-medium mb-1">Error Message</p>
                                             <p className="text-[11px] text-red-300 font-mono leading-relaxed">{error || 'Unknown error'}</p>
@@ -830,7 +824,8 @@ export function ProjectCreationLoader({
                                                 </li>
                                             </ul>
                                         </div>
-                                    </div>
+                                        </div>
+                                    )}
                                 </div>
                             </motion.div>
                         )}

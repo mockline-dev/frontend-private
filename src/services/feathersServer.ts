@@ -44,7 +44,10 @@ export const createFeathersServerClient = async () => {
 
     // Register projects service with custom 'stats' method so the REST client
     // knows to POST to /projects/stats (FeathersJS v5 custom method convention).
-    app.use('projects', restClient.service('projects'), {
+    // Must use app.get('connection') — the transport stored by configure() —
+    // not restClient directly (mirrors how projectsClient in projects.shared.ts works).
+    const connection = app.get('connection');
+    app.use('projects', connection.service('projects'), {
         methods: ['find', 'get', 'create', 'patch', 'remove', 'stats'],
     });
 

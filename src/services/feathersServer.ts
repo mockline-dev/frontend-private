@@ -37,16 +37,18 @@ export const createFeathersServerClient = async () => {
     };
 
     const app = feathers<ServiceTypes>();
-    // Keep transport separate so we can call transport.service() for custom method registration.
-    const transport = rest(process.env.NEXT_PUBLIC_SOCKET_URL);
     const jwt = (await cookies()).get('jwt')?.value;
 
-    app.configure(transport.fetch(fetch));
+    // rest(url).fetch(fn) returns an initialize function that also carries a
+    // .service(name) factory (undocumented in types, present at runtime).
+    // We configure the app with it AND use it to register the custom 'stats' method.
+    const restConfigure = rest(process.env.NEXT_PUBLIC_SOCKET_URL).fetch(fetch);
+    app.configure(restConfigure);
 
-    // Register projects service with custom 'stats' method.
-    // transport.service() is the correct way to create a REST service instance
-    // with custom methods — mirrors the pattern in projects.shared.ts projectsClient().
-    app.use('projects', transport.service('projects'), {
+    // Register projects with custom 'stats' method so FeathersJS REST client
+    // routes stats() calls to POST /projects/stats.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    app.use('projects', (restConfigure as any).service('projects'), {
         methods: ['find', 'get', 'create', 'patch', 'remove', 'stats'],
     });
 

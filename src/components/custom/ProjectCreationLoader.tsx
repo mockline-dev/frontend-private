@@ -382,12 +382,22 @@ function StaggeredChildren({ children, delay = 0.05 }: { children: React.ReactNo
     );
 }
 
-// Time estimation display
-function TimeEstimate({ stageIndex, isActive }: { stageIndex: number; isActive: boolean }) {
-    if (!isActive || stageIndex >= STAGES.length) return null;
-    
-    const stage = STAGES[stageIndex];
-    
+// Time estimation display — now shows actual elapsed time
+function ElapsedTime({ startedAt, isActive }: { startedAt: number | null; isActive: boolean }) {
+    const [elapsed, setElapsed] = useState(0);
+
+    useEffect(() => {
+        if (!isActive || !startedAt) { setElapsed(0); return; }
+        const id = setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 1000);
+        return () => clearInterval(id);
+    }, [isActive, startedAt]);
+
+    if (!isActive || !startedAt) return null;
+
+    const mins = Math.floor(elapsed / 60);
+    const secs = elapsed % 60;
+    const label = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+
     return (
         <motion.div
             initial={{ opacity: 0 }}
@@ -395,9 +405,10 @@ function TimeEstimate({ stageIndex, isActive }: { stageIndex: number; isActive: 
             className="flex items-center gap-1.5 text-[10px] text-white/30"
         >
             <Clock className="w-3 h-3" />
-            <span>{stage?.estimatedTime ?? ''}</span>
+            <span>{label}</span>
         </motion.div>
     );
+}
 }
 
 // Mapping from backend currentStage values to UI stage indices
@@ -414,16 +425,16 @@ const BACKEND_STAGE_TO_UI: Record<string, number> = {
 };
 
 // Main Project Creation Loader Component
-export function ProjectCreationLoader({ 
-    status, 
-    project, 
-    progress, 
-    error, 
-    onRetry, 
-    onBackToDashboard, 
-    onCancel, 
-    onViewArchitecture, 
-    onViewFiles 
+export function ProjectCreationLoader({
+    status,
+    project,
+    progress,
+    error,
+    onRetry,
+    onBackToDashboard,
+    onCancel,
+    onViewArchitecture,
+    onViewFiles
 }: ProjectCreationLoaderProps) {
     const isActive = status === 'creating' || status === 'generating';
     const isError = status === 'error';
@@ -431,6 +442,13 @@ export function ProjectCreationLoader({
     const percentage = Math.min(100, Math.round(progress?.percentage || 0));
     const prefersReducedMotion = useReducedMotion();
     const [showErrorDetails, setShowErrorDetails] = useState(false);
+
+    // Track when generation started to show elapsed time
+    const startedAtRef = useRef<number | null>(null);
+    useEffect(() => {
+        if (isActive && !startedAtRef.current) startedAtRef.current = Date.now();
+        if (!isActive) startedAtRef.current = null;
+    }, [isActive]);
 
     const activeStageIndex = progress?.currentStage
         ? (BACKEND_STAGE_TO_UI[progress.currentStage] ?? 0)
@@ -567,21 +585,16 @@ export function ProjectCreationLoader({
                                     </div>
                                 )}
 
-                                {/* Circular progress */}
-                                <div className="flex justify-center mb-4">
-                                    <CircularProgress percentage={percentage} size={72} strokeWidth={5} />
-                                </div>
-
-                                {/* Linear progress bar */}
-                                <div className="h-[2px] bg-white/[0.06] rounded-full overflow-hidden mb-3">
+                                {/* Linear progress bar — single source of truth for progress */}
+                                <div className="h-[3px] bg-white/[0.06] rounded-full overflow-hidden mb-3">
                                     <motion.div
                                         className="h-full rounded-full relative"
                                         initial={{ width: '0%' }}
                                         animate={{ width: `${percentage}%` }}
-                                        transition={{ duration: prefersReducedMotion ? 0 : 0.5, ease: 'easeOut' }}
+                                        transition={{ duration: prefersReducedMotion ? 0 : 0.7, ease: 'easeOut' }}
                                         style={{
-                                            background: isReady 
-                                                ? '#22c55e' 
+                                            background: isReady
+                                                ? '#22c55e'
                                                 : 'linear-gradient(90deg, #7c3aed 0%, #a78bfa 50%, #7c3aed 100%)',
                                             backgroundSize: '200% 100%'
                                         }}
@@ -596,9 +609,19 @@ export function ProjectCreationLoader({
                                     </motion.div>
                                 </div>
 
-                                {/* Time estimate */}
-                                <div className="flex items-center justify-between">
-                                    <TimeEstimate stageIndex={activeStageIndex} isActive={isActive} />
+                                {/* Metrics row: elapsed time | files count | percentage */}
+                                <div className="flex items-center justify-between gap-4">
+                                    <ElapsedTime startedAt={startedAtRef.current} isActive={isActive} />
+                                    {progress?.filesGenerated ? (
+                                        <motion.div
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            className="flex items-center gap-1.5 text-[10px] text-white/30"
+                                        >
+                                            <FileCode2 className="w-3 h-3" />
+                                            <span>{progress.filesGenerated} file{progress.filesGenerated !== 1 ? 's' : ''}</span>
+                                        </motion.div>
+                                    ) : <span />}
                                     <span className="text-[11px] font-mono font-semibold text-white/60">{percentage}%</span>
                                 </div>
                             </div>
@@ -703,13 +726,17 @@ export function ProjectCreationLoader({
                             </div>
                         )}
 
-                        {/* File skeleton preview */}
+                        {/* File skeleton preview — shows during code generation phase */}
                         {isActive && (currentStage?.key === 'generating' || currentStage?.key === 'validating') && (
                             <div className="mb-5">
                                 <div className="flex items-center justify-between mb-3">
                                     <div className="flex items-center gap-2">
                                         <Terminal className="w-3.5 h-3.5 text-white/40" />
-                                        <span className="text-[11px] text-white/40 font-medium">Generating files...</span>
+                                        <span className="text-[11px] text-white/40 font-medium">
+                                            {progress?.filesGenerated
+                                                ? `${progress.filesGenerated} file${progress.filesGenerated !== 1 ? 's' : ''} generated`
+                                                : 'Generating files...'}
+                                        </span>
                                     </div>
                                 </div>
                                 <div className="space-y-2">
@@ -718,45 +745,15 @@ export function ProjectCreationLoader({
                                     ))}
                                 </div>
                                 {progress?.currentStage && (
-                                    <motion.p 
-                                        initial={{ opacity: 0 }} 
-                                        animate={{ opacity: 1 }} 
+                                    <motion.p
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
                                         className="text-[10px] text-white/25 font-mono mt-2 truncate flex items-center gap-1.5"
                                     >
                                         <Activity className="w-3 h-3" />
                                         {progress.currentStage.replace(/_/g, ' ')}
                                     </motion.p>
                                 )}
-                            </div>
-                        )}
-
-                        {/* File progress bar */}
-                        {isActive && progress && progress.totalFiles > 0 && (
-                            <div className="bg-white/[0.02] border border-white/[0.05] rounded-xl px-4 py-3 mb-4">
-                                <div className="flex items-center justify-between mb-2">
-                                    <div className="flex items-center gap-2">
-                                        <FileCode2 className="w-3.5 h-3.5 text-white/40" />
-                                        <span className="text-[11px] text-white/40">Files generated</span>
-                                    </div>
-                                    <span className="text-[11px] font-mono font-semibold text-white/60">
-                                        {progress.filesGenerated} <span className="text-white/25">/</span> {progress.totalFiles}
-                                    </span>
-                                </div>
-                                <div className="h-[1.5px] bg-white/[0.05] rounded-full overflow-hidden">
-                                    <motion.div
-                                        className="h-full bg-violet-500 rounded-full relative"
-                                        animate={{ width: `${(progress.filesGenerated / progress.totalFiles) * 100}%` }}
-                                        transition={{ duration: prefersReducedMotion ? 0 : 0.35 }}
-                                    >
-                                        {!prefersReducedMotion && (
-                                            <motion.div
-                                                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/35 to-transparent"
-                                                animate={{ x: ['-100%', '200%'] }}
-                                                transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
-                                            />
-                                        )}
-                                    </motion.div>
-                                </div>
                             </div>
                         )}
 

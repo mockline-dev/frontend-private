@@ -2,7 +2,7 @@
 
 import { createMessage as createMessageAction } from '@/api/messages/createMessage';
 import { fetchMessages } from '@/api/messages/fetchMessages';
-import { type Message, type OrchestrationCompletedEvent, type OrchestrationErrorEvent, type OrchestrationIntentEvent, type OrchestrationTokenEvent, type FilesPersistedEvent, type ProgressStageEvent } from '@/types/feathers';
+import { type Message, type OrchestrationCompletedEvent, type OrchestrationErrorEvent, type OrchestrationIntentEvent, type OrchestrationTokenEvent, type FilesPersistedEvent, type ProgressStageEvent, type RepairStartedEvent, type RepairCompletedEvent, type RepairFailedEvent } from '@/types/feathers';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useRealtimeUpdates, useSocketEvent } from './useRealtimeUpdates';
@@ -42,6 +42,10 @@ export interface UseAIAgentReturn {
     retryMessage: (messageId: string) => Promise<void>;
     stopStream: () => void;
     loadOlderMessages: () => Promise<void>;
+    /** Whether auto-repair is currently active for the session */
+    isRepairing: boolean;
+    /** Repair attempt label, e.g. "1/2" */
+    repairAttemptLabel: string | null;
 }
 
 function mergeMessagesById(existing: Message[], incoming: Message[]): Message[] {
@@ -68,6 +72,8 @@ export function useAIAgent({
     const [pipelineStage, setPipelineStage] = useState<string | null>(null);
     const [pipelineProgress, setPipelineProgress] = useState(0);
     const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
+    const [isRepairing, setIsRepairing] = useState(false);
+    const [repairAttemptLabel, setRepairAttemptLabel] = useState<string | null>(null);
 
     const streamingContentRef = useRef('');
     const initializedRef = useRef(false);
@@ -293,6 +299,26 @@ export function useAIAgent({
         onFilesChanged?.();
     });
 
+    // -------------------------------------------------------------------------
+    // Real-time: Session repair events (Socket.IO)
+    // Shown as a live banner in the chat while repair is active.
+    // -------------------------------------------------------------------------
+    useSocketEvent<RepairStartedEvent>('repair:started', (event) => {
+        setIsRepairing(true);
+        const label = event.maxAttempts > 1 ? `${event.attempt}/${event.maxAttempts}` : null;
+        setRepairAttemptLabel(label);
+    });
+
+    useSocketEvent<RepairCompletedEvent>('repair:completed', () => {
+        setIsRepairing(false);
+        setRepairAttemptLabel(null);
+    });
+
+    useSocketEvent<RepairFailedEvent>('repair:failed', () => {
+        setIsRepairing(false);
+        setRepairAttemptLabel(null);
+    });
+
     return {
         messages,
         hasOlderMessages,
@@ -308,5 +334,7 @@ export function useAIAgent({
         retryMessage,
         stopStream,
         loadOlderMessages,
+        isRepairing,
+        repairAttemptLabel,
     };
 }

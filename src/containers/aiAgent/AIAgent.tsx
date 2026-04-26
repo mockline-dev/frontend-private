@@ -24,7 +24,7 @@ const suggestedPrompts = [
 ];
 
 export function AiAgent({ projectId, onFilesChanged }: AIAgentProps) {
-    const { messages, hasOlderMessages, isLoadingOlderMessages, input, setInput, isLoading, isStreaming, pipelineStage, pipelineProgress, retryingMessageId, handleSubmit, retryMessage, loadOlderMessages, stopStream } =
+    const { messages, hasOlderMessages, isLoadingOlderMessages, input, setInput, isLoading, isStreaming, pipelineStage, pipelineProgress, retryingMessageId, handleSubmit, retryMessage, loadOlderMessages, stopStream, isRepairing, repairAttemptLabel } =
         useAIAgent({ ...(projectId ? { projectId } : {}), ...(onFilesChanged ? { onFilesChanged } : {}) });
 
     const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -278,6 +278,13 @@ export function AiAgent({ projectId, onFilesChanged }: AIAgentProps) {
                     </div>
                 );
                 })}
+
+                {isRepairing && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 mx-2 rounded-lg border bg-amber-50 border-amber-200 text-amber-700 text-[11px] font-medium" role="status">
+                        <Wrench className="w-3.5 h-3.5 shrink-0 animate-pulse" />
+                        <span>Auto-repairing server{repairAttemptLabel ? ` (attempt ${repairAttemptLabel})` : ''}…</span>
+                    </div>
+                )}
 
                 {showTypingIndicator && (
                     <div className="flex gap-2" role="status" aria-live="polite" aria-label="Assistant is composing a response">

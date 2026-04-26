@@ -77,6 +77,10 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
     const [enhancedPrompt, setEnhancedPrompt] = useState<string | null>(null);
     const [sandboxSuccess, setSandboxSuccess] = useState<boolean | null>(null);
 
+    // Ref so orchestration socket-event handlers can read current status without stale closure.
+    const statusRef = useRef<ProjectCreationStatus>('idle');
+    useEffect(() => { statusRef.current = status; }, [status]);
+
     /**
      * Creates a new project with the provided data.
      */
@@ -175,6 +179,8 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
     const hasReceivedFirstTokenRef = useRef(false);
 
     useSocketEvent<OrchestrationStartedEvent>('orchestration:started', (event) => {
+        // Only react during active project creation — not for post-creation AI tasks
+        if (statusRef.current !== 'creating' && statusRef.current !== 'generating') return;
         if (event.projectId !== project?._id) return; // has projectId
         hasReceivedFirstTokenRef.current = false;
         setStatus('generating');
@@ -186,6 +192,7 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
     });
 
     useSocketEvent('orchestration:intent', () => {
+        if (statusRef.current !== 'creating' && statusRef.current !== 'generating') return;
         // payload: { intent, confidence, entities } — no projectId
         // Map to 'analyzing' stage regardless of intent string from backend
         setProgress((prev) => ({
@@ -196,6 +203,7 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
     });
 
     useSocketEvent('orchestration:enhanced', () => {
+        if (statusRef.current !== 'creating' && statusRef.current !== 'generating') return;
         setProgress((prev) => ({
             ...(prev ?? { filesGenerated: 0, totalFiles: 0 }),
             currentStage: 'planning',
@@ -204,6 +212,7 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
     });
 
     useSocketEvent('orchestration:context', () => {
+        if (statusRef.current !== 'creating' && statusRef.current !== 'generating') return;
         setProgress((prev) => ({
             ...(prev ?? { filesGenerated: 0, totalFiles: 0 }),
             currentStage: 'planning',
@@ -212,6 +221,7 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
     });
 
     useSocketEvent('orchestration:token', () => {
+        if (statusRef.current !== 'creating' && statusRef.current !== 'generating') return;
         if (hasReceivedFirstTokenRef.current) return;
         hasReceivedFirstTokenRef.current = true;
         setProgress((prev) => ({
@@ -222,6 +232,7 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
     });
 
     useSocketEvent('orchestration:completed', () => {
+        if (statusRef.current !== 'creating' && statusRef.current !== 'generating') return;
         setProgress((prev) => ({
             ...(prev ?? { filesGenerated: 0, totalFiles: 0 }),
             currentStage: 'validating',
@@ -230,13 +241,15 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
     });
 
     useSocketEvent<OrchestrationErrorEvent>('orchestration:error', (event) => {
-        // payload: { error } — no projectId
+        // Only handle errors during active creation — post-creation errors shown in chat
+        if (statusRef.current !== 'creating' && statusRef.current !== 'generating') return;
         setLocalError(event.error);
         setStatus('error');
         optionsRef.current?.onError?.(event.error);
     });
 
     useSocketEvent<SandboxResultEvent>('sandbox:result', (event) => {
+        if (statusRef.current !== 'creating' && statusRef.current !== 'generating') return;
         // payload: { success, syntaxValid, compilationOutput, testOutput?, durationMs } — no projectId
         setSandboxSuccess(event.success);
         setProgress((prev) => ({
@@ -247,6 +260,7 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
     });
 
     useSocketEvent<FilesPersistedEvent>('files:persisted', (event) => {
+        if (statusRef.current !== 'creating' && statusRef.current !== 'generating') return;
         // payload: { fileIds, snapshotId, uploadedCount, filePaths } — no projectId
         setProgress((prev) => ({
             ...(prev ?? { filesGenerated: 0, totalFiles: 0 }),
@@ -257,6 +271,7 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
     });
 
     useSocketEvent<IndexingCompletedEvent>('indexing:completed', (event) => {
+        if (statusRef.current !== 'creating' && statusRef.current !== 'generating') return;
         if (event.projectId !== project?._id) return; // has projectId
         setProgress((prev) => ({
             ...(prev ?? { filesGenerated: 0, totalFiles: 0 }),

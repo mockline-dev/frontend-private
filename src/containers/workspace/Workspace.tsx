@@ -614,7 +614,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     const promptFromUrl = searchParams.get('prompt');
     const isWorkspaceLoading = !!currentProjectId && !currentProject && !isCreating;
 
-    if (!hasError && (isCreating || (!isCreating && promptFromUrl))) {
+    if (!hasError && (isCreating || (promptFromUrl && creationState.status !== 'ready' && creationState.status !== 'idle'))) {
         return (
             <ProjectCreationLoader
                 status={creationState.status}

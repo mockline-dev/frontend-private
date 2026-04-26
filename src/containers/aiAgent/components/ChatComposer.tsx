@@ -3,7 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { useAutoResizeTextarea } from '@/components/ui/animated-ai-chat/hooks/useAutoResizeTextarea';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Loader2, Send, Square } from 'lucide-react';
+import { Send, Square } from 'lucide-react';
 
 interface ChatComposerProps {
     value: string;
@@ -52,7 +52,7 @@ export function ChatComposer({
                     onKeyDown={handleKeyDown}
                     placeholder={placeholder}
                     rows={1}
-                    className="flex-1 bg-white border border-zinc-300 rounded-xl px-3 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent resize-none"
+                    className="flex-1 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-zinc-400 resize-none transition-colors"
                     disabled={disabled || isBusy}
                     style={{ minHeight: 44 }}
                     aria-label="Message Mocky"
@@ -89,15 +89,16 @@ export function ChatComposer({
                                 type="submit"
                                 disabled={!value.trim() || isBusy || disabled}
                                 size="icon"
-                                className="bg-black hover:bg-zinc-800 text-white h-11 w-11 rounded-xl"
+                                className="bg-zinc-900 hover:bg-zinc-700 text-white h-11 w-11 rounded-xl"
                                 aria-label={isBusy ? 'Sending message' : 'Send message'}
                             >
-                                {isBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                                <Send className="w-4 h-4" />
                             </Button>
                         </motion.div>
                     )}
                 </AnimatePresence>
             </div>
+            <p className="text-[10px] text-zinc-400 mt-2 text-center">↵ send · ⇧↵ new line</p>
         </form>
     );
 }

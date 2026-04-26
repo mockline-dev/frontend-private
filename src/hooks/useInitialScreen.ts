@@ -139,11 +139,7 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
         enhanceLoading,
         handleEnhancePrompt,
         handleSendPrompt,
-        creationState,
         isCreating,
-        resetState,
-        isPreprocessing: false,
-        showMorphLoading: isCreating,
-        isMorphing: isCreating
+        isPreprocessing: false
     };
 }

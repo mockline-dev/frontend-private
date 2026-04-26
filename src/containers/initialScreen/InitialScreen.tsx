@@ -1,7 +1,6 @@
 'use client';
 
 import Header from '@/components/custom/Header';
-import ProjectPreparationOverlay from '@/components/custom/ProjectPreparationOverlay';
 import { AnimatedAIChat } from '@/components/ui/animated-ai-chat';
 import { useInitialScreen } from '@/hooks/useInitialScreen';
 import { useRouter } from 'next/navigation';
@@ -20,11 +19,7 @@ export function InitialScreen({ currentUser }: InitialScreenProps) {
         enhanceLoading,
         handleEnhancePrompt,
         handleSendPrompt,
-        creationState,
-        isPreprocessing,
-        showMorphLoading,
-        isMorphing,
-        resetState
+        isPreprocessing
     } = useInitialScreen({ currentUser });
 
     return (
@@ -38,9 +33,7 @@ export function InitialScreen({ currentUser }: InitialScreenProps) {
                 onEnhanceClick={handleEnhancePrompt}
                 enhanceLoading={enhanceLoading}
                 sending={isPreprocessing}
-                isMorphing={isMorphing}
             />
-            <ProjectPreparationOverlay visible={showMorphLoading} state={creationState} onCancel={resetState} />
         </div>
     );
 }

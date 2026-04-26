@@ -1,7 +1,7 @@
 'use client';
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { MonacoEditor } from '@/components/custom/MonacoEditor';
+import { MonacoEditor } from '../../MonacoEditor';
 import { DEFAULT_CONTENT_TYPES } from '../constants';
 
 interface BodyEditorProps {

@@ -1,6 +1,6 @@
 'use client';
 
-import { MonacoEditor } from '@/components/custom/MonacoEditor';
+import { MonacoEditor } from '../../MonacoEditor';
 
 interface ResponseBodyViewerProps {
     body: string;

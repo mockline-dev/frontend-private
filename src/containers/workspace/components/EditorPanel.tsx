@@ -1,8 +1,8 @@
 'use client';
 
-import { EditorTabs } from '@/components/custom/EditorTabs';
-import { EmptyEditor } from '@/components/custom/EmptyEditor';
-import { MonacoEditor } from '@/components/custom/MonacoEditor';
+import { EditorTabs } from './EditorTabs';
+import { EmptyEditor } from './EmptyEditor';
+import { MonacoEditor } from './MonacoEditor';
 import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { ApiTester } from '@/containers/workspace/components/ApiTester';

@@ -1,7 +1,7 @@
 'use client';
 
-import { FileTreeContextMenu } from '@/components/custom/FileTreeContextMenu';
-import { InlineRenameInput } from '@/components/custom/InlineRenameInput';
+import { FileTreeContextMenu } from './FileTreeContextMenu';
+import { InlineRenameInput } from './InlineRenameInput';
 import { getFileIcon } from '@/utils/fileIcons';
 import type { FileNode } from '@/types/workspace';
 import { createElement } from 'react';

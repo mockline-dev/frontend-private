@@ -1,6 +1,6 @@
 'use client';
 
-import { ChatComposer } from '@/components/custom/ChatComposer';
+import { ChatComposer } from './components/ChatComposer';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAIAgent } from '@/hooks/useAIAgent';
 import { CheckCircle2, Loader2, Wrench } from 'lucide-react';
@@ -85,7 +85,7 @@ export function AiAgent({ projectId, onFilesChanged }: AIAgentProps) {
             <div
                 ref={messagesContainerRef}
                 onScroll={handleMessagesScroll}
-                className="flex-1 overflow-y-auto px-3 py-3 space-y-3 bg-linear-to-b from-white to-gray-50"
+                className="flex-1 overflow-y-auto px-3 py-3 space-y-1"
                 role="log"
                 aria-live="polite"
                 aria-relevant="additions text"
@@ -93,14 +93,16 @@ export function AiAgent({ projectId, onFilesChanged }: AIAgentProps) {
             >
                 {isLoadingOlderMessages && (
                     <div className="flex items-center justify-center py-2" role="status">
-                        <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
-                        <span className="text-xs text-gray-500 ml-2">Loading older messages...</span>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-400" />
+                        <span className="text-[11px] text-zinc-400 ml-2">Loading older messages…</span>
                     </div>
                 )}
 
                 {!isLoadingOlderMessages && hasOlderMessages && (
-                    <div className="flex items-center justify-center py-1">
-                        <span className="text-[10px] text-gray-400">Scroll up to load older messages</span>
+                    <div className="flex items-center gap-3 py-2 px-2">
+                        <div className="flex-1 h-px bg-zinc-200" />
+                        <span className="text-[10px] text-zinc-400">scroll up for older messages</span>
+                        <div className="flex-1 h-px bg-zinc-200" />
                     </div>
                 )}
 
@@ -129,18 +131,18 @@ export function AiAgent({ projectId, onFilesChanged }: AIAgentProps) {
                 })}
 
                 {isRepairing && (
-                    <div className="flex items-center gap-2 px-3 py-1.5 mx-2 rounded-lg border bg-amber-50 border-amber-200 text-amber-700 text-[11px] font-medium" role="status">
-                        <Wrench className="w-3.5 h-3.5 shrink-0 animate-pulse" />
-                        <span>Auto-repairing server{repairAttemptLabel ? ` (attempt ${repairAttemptLabel})` : ''}…</span>
+                    <div className="flex items-center gap-2 px-3 py-2 mx-1 rounded-lg border bg-amber-50 border-amber-200 text-amber-700 text-[11px] font-medium" role="status">
+                        <Wrench className="w-3 h-3 shrink-0 animate-pulse" />
+                        <span>Auto-repairing{repairAttemptLabel ? ` · attempt ${repairAttemptLabel}` : ''}…</span>
                     </div>
                 )}
 
                 {showTypingIndicator && <TypingBubble pipelineStage={pipelineStage} pipelineProgress={pipelineProgress} />}
 
                 {pipelineStage === 'Files saved' && !isStreaming && !isLoading && (
-                    <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded-xl px-3 py-2" role="status">
+                    <div className="flex items-center gap-2 text-[11px] text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2" role="status">
                         <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Files updated — file tree refreshed</span>
+                        <span>Files updated</span>
                     </div>
                 )}
 

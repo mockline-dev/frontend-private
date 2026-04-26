@@ -194,6 +194,11 @@ export interface MessageMetadata {
     newFiles?: string[];
     modifiedFiles?: string[];
     durationSec?: string;
+    // Line-level diffs for repair messages
+    fileDiffs?: Array<{
+        path: string;
+        hunks: Array<{ lines: Array<{ type: 'add' | 'remove' | 'context'; text: string }> }>;
+    }>;
     [key: string]: unknown;
 }
 

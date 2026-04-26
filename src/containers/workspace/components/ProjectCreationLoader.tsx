@@ -2,7 +2,8 @@
 
 import { GenerationProgress, Project } from '@/types/feathers';
 import { AnimatePresence, motion, Variants, useReducedMotion } from 'framer-motion';
-import { Activity, AlertCircle, ArrowLeft, CheckCircle2, Code2, Clock, Cpu, FileCode2, GitBranch, Layers, Loader2, RotateCcw, Sparkles, Terminal, Zap } from 'lucide-react';
+import { Activity, AlertCircle, ArrowLeft, CheckCircle2, Code2, Clock, Cpu, FileCode2, GitBranch, Layers, Loader2, RotateCcw, Terminal, Zap } from 'lucide-react';
+import Image from 'next/image';
 import React, { useEffect, useRef, useState } from 'react';
 
 export interface ProjectCreationLoaderProps {
@@ -196,7 +197,7 @@ export function ProjectCreationLoader({ status, project, progress, error, onRetr
                             <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-2">
                                     <div className="w-5 h-5 rounded bg-primary/15 border border-primary/25 flex items-center justify-center">
-                                        <Sparkles className="w-3 h-3 text-primary" />
+                                        <Image alt='' src='/logo.png' width={20} height={20} className="w-3 h-3 text-primary" />
                                     </div>
                                     <span className="text-[10px] font-medium text-primary tracking-widest uppercase">Mockline AI</span>
                                 </div>

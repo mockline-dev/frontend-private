@@ -4,8 +4,8 @@ import { downloadProject } from '@/api/projects/downloadProject';
 import { createUpload } from '@/api/uploads/createUpload';
 import { patchUpload } from '@/api/uploads/patchUpload';
 import { updateUpload } from '@/api/uploads/updateUpload';
-import { ProjectCreationLoader } from '@/components/custom/ProjectCreationLoader';
-import { QuickOpen } from '@/components/custom/QuickOpen';
+import { ProjectCreationLoader } from '@/containers/workspace/components/ProjectCreationLoader';
+import { QuickOpen } from '@/containers/workspace/components/QuickOpen';
 import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { EditorPanel } from '@/containers/workspace/components/EditorPanel';
@@ -429,12 +429,32 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
 
     const updatingFiles = useMemo(() => new Set<string>(), []);
 
+    // Track whether this project has ever had files loaded — prevents the full-screen
+    // ProjectCreationLoader from flashing during AI chat when loadFiles() briefly clears files.
+    const [hasEverHadFiles, setHasEverHadFiles] = useState(
+        files.length > 0 || (initialFiles?.length ?? 0) > 0
+    );
+    useEffect(() => {
+        if (files.length > 0 && !hasEverHadFiles) setHasEverHadFiles(true);
+    }, [files.length, hasEverHadFiles]);
+
+    // Track whether the workspace has fully initialized — prevents the loader from
+    // appearing during AI response cycles on an already-loaded workspace.
+    const hasWorkspaceInitialized = useRef(false);
+    useEffect(() => {
+        if (currentProject && currentProjectId) {
+            hasWorkspaceInitialized.current = true;
+        }
+    }, [currentProject, currentProjectId]);
+
     const hasError = creationState.status === 'error' || currentProject?.status === 'error';
     const promptFromUrl = searchParams.get('prompt');
     const isWorkspaceLoading = !!currentProjectId && !currentProject && !isCreating;
 
     const isExternallyGenerating =
         !isCreating &&
+        !hasWorkspaceInitialized.current &&
+        !hasEverHadFiles &&
         (currentProject?.status === 'generating' || currentProject?.status === 'initializing') &&
         files.length === 0;
 
@@ -521,7 +541,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
 
             <div className="flex-1 flex overflow-hidden">
                 <ResizablePanelGroup direction="horizontal" className="flex-1">
-                    <ResizablePanel defaultSize={'15%'} minSize={'10%'} maxSize={'40%'}>
+                    <ResizablePanel defaultSize={'15%'} minSize={'10%'} collapsible>
                         <WorkspaceSidebar
                             sidebarView={sidebarView}
                             onSidebarViewChange={setSidebarView}
@@ -541,7 +561,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                         />
                     </ResizablePanel>
                     <ResizableHandle className="w-1 bg-border hover:bg-blue-400 transition-colors cursor-col-resize" />
-                    <ResizablePanel defaultSize={75} minSize={40}>
+                    <ResizablePanel defaultSize={'50%'} minSize={'45%'}>
                         <EditorPanel
                             activeView={activeView}
                             selectedFile={selectedFile}

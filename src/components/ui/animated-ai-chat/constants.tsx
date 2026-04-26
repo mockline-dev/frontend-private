@@ -1,30 +1,30 @@
-import { CheckSquareIcon, CreditCardIcon, ShoppingCartIcon, UsersIcon } from 'lucide-react';
+import { BookOpenIcon, LinkIcon, NotebookPenIcon, UsersIcon } from 'lucide-react';
 
 import type { CommandSuggestion } from './types';
 
 export const COMMAND_SUGGESTIONS: CommandSuggestion[] = [
     {
-        icon: <CheckSquareIcon className="w-4 h-4" />,
-        label: 'Task Manager API',
-        description: 'Build a task management backend with projects and tasks',
-        prefix: 'Build a backend for a task management application with projects and tasks. Include user authentication, task CRUD operations, project organization, task assignment, due dates, status tracking, and pagination.'
-    },
-    {
-        icon: <CreditCardIcon className="w-4 h-4" />,
-        label: 'SaaS Platform Backend',
-        description: 'Generate a SaaS platform backend with subscriptions and payments',
-        prefix: 'Generate a backend for a SaaS platform with user authentication, subscription plans, payment integration, organization workspaces, and role-based access control.'
-    },
-    {
-        icon: <ShoppingCartIcon className="w-4 h-4" />,
-        label: 'E-commerce API',
-        description: 'Build an e-commerce backend with products, categories, shopping cart, orders, payments, inventory management, and user accounts.',
-        prefix: 'Build an e-commerce backend with products, categories, shopping cart, orders, payments, inventory management, and user accounts.'
+        icon: <NotebookPenIcon className="w-4 h-4" />,
+        label: 'Notes API',
+        description: 'Simple notes app with tags and search',
+        prefix: 'Build a REST API for a notes app. Users can create, read, update, and delete notes. Notes have a title, content, and optional tags. Include search by title or tag.',
     },
     {
         icon: <UsersIcon className="w-4 h-4" />,
-        label: 'Social Platform API',
-        description: 'Generate a backend for a social media platform with users, posts, comments, likes, follows, and notifications.',
-        prefix: 'Generate a backend for a social media platform with users, posts, comments, likes, follows, and notifications.'
-    }
+        label: 'User Auth API',
+        description: 'User registration, login, and profile management',
+        prefix: 'Build a user authentication API with registration, login, logout, and profile management. Use JWT tokens. Include password hashing and basic profile fields (name, email, avatar URL).',
+    },
+    {
+        icon: <BookOpenIcon className="w-4 h-4" />,
+        label: 'Blog API',
+        description: 'Posts, comments, and author profiles',
+        prefix: 'Build a blog backend API with posts and comments. Posts have a title, body, author, publish date, and slug. Users can comment on posts. Include list and detail endpoints.',
+    },
+    {
+        icon: <LinkIcon className="w-4 h-4" />,
+        label: 'URL Shortener',
+        description: 'Shorten URLs and track click counts',
+        prefix: 'Build a URL shortener API. Users submit a long URL and receive a short code. Visiting the short code redirects to the original URL. Track total click count per link.',
+    },
 ];

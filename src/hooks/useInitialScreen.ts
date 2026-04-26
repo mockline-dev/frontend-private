@@ -33,10 +33,6 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
         isCreating,
         resetState
     } = useProjectCreation({
-        onSuccess: (project) => {
-            options?.onProjectCreated?.(project._id);
-            queueMicrotask(() => router.push(`/workspace?projectId=${project._id}`));
-        },
         onError: (error) => {
             toast.error(error);
         }
@@ -59,7 +55,6 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
             }
 
             try {
-                // Step 1: Create project with basic metadata derived from prompt
                 const resolvedName = projectName.trim() || deriveProjectName(normalizedPrompt);
                 const project = await createProject({
                     userId: options?.currentUser?.feathersId ?? '',
@@ -72,11 +67,14 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
 
                 if (!project) return;
 
-                // Step 2: POST first message — triggers backend orchestration pipeline
-                await createMessage({
+                router.push(`/workspace?projectId=${project._id}`);
+
+                createMessage({
                     projectId: project._id,
                     role: 'user',
                     content: normalizedPrompt
+                }).catch((err) => {
+                    console.error('[useInitialScreen] Failed to create message:', err instanceof Error ? err.message : String(err));
                 });
             } catch (error) {
                 const message = error instanceof Error ? error.message : 'Failed to create project';
@@ -125,7 +123,6 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
         }
     }, [options?.currentUser]);
 
-    // Fetch a random project name on mount
     useEffect(() => {
         fetch(`${backendUrl}/generate-name`)
             .then((r) => r.json() as Promise<{ name?: string }>)
@@ -138,7 +135,6 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
         setPromptValue,
         projectName,
         setProjectName,
-        // Backend now handles enhancement; expose state for UI compatibility
         enhancedPrompt: creationState.enhancedPrompt ?? '',
         enhanceLoading,
         handleEnhancePrompt,

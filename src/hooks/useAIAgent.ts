@@ -10,14 +10,13 @@ import { useRealtimeUpdates, useSocketEvent } from './useRealtimeUpdates';
 const INITIAL_MESSAGES_LIMIT = 10;
 const OLDER_MESSAGES_BATCH_SIZE = 50;
 
-/** Placeholder ID for the in-flight streaming message shown in the UI. */
 const STREAMING_MESSAGE_ID = '__streaming__';
 
-/** Human-readable labels for each backend pipeline stage. */
 const PIPELINE_STAGE_LABELS: Record<string, string> = {
     classifying: 'Classifying intent…',
     enhancing:   'Enhancing prompt…',
     retrieving:  'Retrieving context…',
+    planning:    'Planning project structure…',
     generating:  'Generating code…',
     validating:  'Validating in sandbox…',
     fixing:      'Auto-fixing issues…',
@@ -33,18 +32,14 @@ export interface UseAIAgentReturn {
     setInput: (value: string) => void;
     isLoading: boolean;
     isStreaming: boolean;
-    /** Current orchestration pipeline stage label, e.g. 'Generating code…' */
     pipelineStage: string | null;
-    /** Current pipeline progress percentage (0-100), driven by progress:stage events */
     pipelineProgress: number;
     retryingMessageId: string | null;
     handleSubmit: (content?: string) => Promise<void>;
     retryMessage: (messageId: string) => Promise<void>;
     stopStream: () => void;
     loadOlderMessages: () => Promise<void>;
-    /** Whether auto-repair is currently active for the session */
     isRepairing: boolean;
-    /** Repair attempt label, e.g. "1/2" */
     repairAttemptLabel: string | null;
 }
 
@@ -80,9 +75,6 @@ export function useAIAgent({
     const messagesRef = useRef(messages);
     messagesRef.current = messages;
 
-    // -------------------------------------------------------------------------
-    // Initial message load
-    // -------------------------------------------------------------------------
     const loadInitialMessages = useCallback(async () => {
         if (!projectId || initializedRef.current) return;
         initializedRef.current = true;
@@ -104,15 +96,11 @@ export function useAIAgent({
         }
     }, [projectId]);
 
-    // Trigger initial load when projectId changes (safe: runs after render)
     useEffect(() => {
         initializedRef.current = false;
         void loadInitialMessages();
     }, [projectId, loadInitialMessages]);
 
-    // -------------------------------------------------------------------------
-    // Load older messages (pagination)
-    // -------------------------------------------------------------------------
     const loadOlderMessages = useCallback(async () => {
         if (!projectId || isLoadingOlderMessages || !hasOlderMessages) return;
 
@@ -140,9 +128,6 @@ export function useAIAgent({
         }
     }, [projectId, isLoadingOlderMessages, hasOlderMessages]);
 
-    // -------------------------------------------------------------------------
-    // Send message — triggers full orchestration pipeline via POST /messages
-    // -------------------------------------------------------------------------
     const sendMessage = useCallback(
         async (content: string) => {
             if (!projectId || !content.trim()) return;
@@ -153,7 +138,6 @@ export function useAIAgent({
             setPipelineProgress(0);
             streamingContentRef.current = '';
 
-            // Optimistically add user message
             const optimisticUser: Message = {
                 _id: `optimistic-${Date.now()}`,
                 projectId,
@@ -166,7 +150,6 @@ export function useAIAgent({
 
             try {
                 await createMessageAction({ projectId, role: 'user', content: trimmed });
-                // Keep optimistic message — real 'messages created' event will deduplicate it
                 setIsStreaming(true);
             } catch (err) {
                 const msg = err instanceof Error ? err.message : 'Failed to send message';
@@ -212,13 +195,9 @@ export function useAIAgent({
         setMessages((prev) => prev.filter((m) => m._id !== STREAMING_MESSAGE_ID));
     }, []);
 
-    // -------------------------------------------------------------------------
-    // Real-time: Feathers service events
-    // -------------------------------------------------------------------------
     useRealtimeUpdates<Message>('messages', 'created', (message) => {
         if (message.projectId !== projectId) return;
         setMessages((prev) => {
-            // Remove streaming placeholder, any existing copy, and optimistic user message with same content
             const filtered = prev.filter(
                 (m) =>
                     m._id !== STREAMING_MESSAGE_ID &&
@@ -240,9 +219,6 @@ export function useAIAgent({
         setMessages((prev) => prev.map((m) => (m._id === message._id ? message : m)));
     });
 
-    // -------------------------------------------------------------------------
-    // Real-time: Orchestration pipeline events (Socket.IO)
-    // -------------------------------------------------------------------------
     useSocketEvent<OrchestrationIntentEvent>('orchestration:intent', (event) => {
         setPipelineStage(`Classifying: ${event.intent}`);
     });
@@ -275,7 +251,6 @@ export function useAIAgent({
 
     useSocketEvent<OrchestrationCompletedEvent>('orchestration:completed', () => {
         setPipelineStage('Persisting files…');
-        // isStreaming stays true until 'messages created' fires
     });
 
     useSocketEvent<OrchestrationErrorEvent>('orchestration:error', ({ error }) => {
@@ -287,8 +262,6 @@ export function useAIAgent({
         setMessages((prev) => prev.filter((m) => m._id !== STREAMING_MESSAGE_ID));
     });
 
-    // Granular pipeline stage events — emitted by both orchestrator.ts and the worker for all intents
-    // (including code/tool-calling intents that don't emit orchestration:token).
     useSocketEvent<ProgressStageEvent>('progress:stage', ({ stage, percentage }) => {
         setPipelineStage(PIPELINE_STAGE_LABELS[stage] ?? stage);
         setPipelineProgress(percentage);
@@ -299,10 +272,6 @@ export function useAIAgent({
         onFilesChanged?.();
     });
 
-    // -------------------------------------------------------------------------
-    // Real-time: Session repair events (Socket.IO)
-    // Shown as a live banner in the chat while repair is active.
-    // -------------------------------------------------------------------------
     useSocketEvent<RepairStartedEvent>('repair:started', (event) => {
         setIsRepairing(true);
         const label = event.maxAttempts > 1 ? `${event.attempt}/${event.maxAttempts}` : null;

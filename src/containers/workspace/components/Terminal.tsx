@@ -5,13 +5,11 @@ import { cn } from '@/lib/utils';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Terminal as XTerm } from '@xterm/xterm';
-import { Bug, Check, CheckCheck, Eraser, RefreshCw, Square, Terminal as TerminalIcon, X, Zap } from 'lucide-react';
+import { Bug, Check, CheckCheck, Eraser, RefreshCw, Square, Terminal as TerminalIcon, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import '@xterm/xterm/css/xterm.css';
 import { DebugPanel } from './DebugPanel';
 import { backendUrl } from '@/config/environment';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface TerminalProps {
     isOpen: boolean;
@@ -29,8 +27,6 @@ interface TerminalProps {
     repairAttempt?: number;
     repairMaxAttempts?: number;
 }
-
-// ─── Status chip ──────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG = {
     starting:  { label: 'Starting',  dot: 'bg-amber-400 animate-pulse',  text: 'text-amber-300',   ring: 'ring-amber-500/20' },
@@ -62,34 +58,29 @@ function StatusChip({ status }: { status: NonNullable<TerminalProps['sessionStat
     );
 }
 
-// ─── xterm theme (zinc-mapped) ────────────────────────────────────────────────
-
 const XTERM_THEME = {
-    background:       '#09090b', // zinc-950
-    foreground:       '#f4f4f5', // zinc-100
-    cursor:           '#e4e4e7', // zinc-200
+    background:       '#09090b',
+    foreground:       '#f4f4f5',
+    cursor:           '#e4e4e7',
     cursorAccent:     '#09090b',
     selectionBackground: 'rgba(161,161,170,0.2)',
-    // Standard ANSI (zinc-mapped where sensible, saturated for signal colours)
-    black:            '#18181b', // zinc-900
-    red:              '#f87171', // red-400
-    green:            '#4ade80', // green-400
-    yellow:           '#facc15', // yellow-400
-    blue:             '#60a5fa', // blue-400
-    magenta:          '#c084fc', // purple-400
-    cyan:             '#22d3ee', // cyan-400
-    white:            '#d4d4d8', // zinc-300
-    brightBlack:      '#3f3f46', // zinc-700
-    brightRed:        '#fca5a5', // red-300
-    brightGreen:      '#86efac', // green-300
-    brightYellow:     '#fde047', // yellow-300
-    brightBlue:       '#93c5fd', // blue-300
-    brightMagenta:    '#d8b4fe', // purple-300
-    brightCyan:       '#67e8f9', // cyan-300
-    brightWhite:      '#f4f4f5', // zinc-100
+    black:            '#18181b',
+    red:              '#f87171',
+    green:            '#4ade80',
+    yellow:           '#facc15',
+    blue:             '#60a5fa',
+    magenta:          '#c084fc',
+    cyan:             '#22d3ee',
+    white:            '#d4d4d8',
+    brightBlack:      '#3f3f46',
+    brightRed:        '#fca5a5',
+    brightGreen:      '#86efac',
+    brightYellow:     '#fde047',
+    brightBlue:       '#93c5fd',
+    brightMagenta:    '#d8b4fe',
+    brightCyan:       '#67e8f9',
+    brightWhite:      '#f4f4f5',
 };
-
-// ─── Component ────────────────────────────────────────────────────────────────
 
 export function Terminal({
     isOpen,
@@ -114,7 +105,6 @@ export function Terminal({
     const lastOutputLen = useRef(0);
     const [debugMode, setDebugMode] = useState(false);
 
-    // ── Init xterm on mount ──────────────────────────────────────────────────
     useEffect(() => {
         if (!containerRef.current || initializedRef.current) return;
         initializedRef.current = true;
@@ -142,7 +132,6 @@ export function Terminal({
         xtermRef.current    = term;
         fitAddonRef.current = fitAddon;
 
-        // Welcome banner
         term.write(
             `\x1b[90m┌─────────────────────────────────────────────────────────\r\n` +
             `│  \x1b[97mmockline\x1b[90m  sandbox terminal` +
@@ -160,7 +149,6 @@ export function Terminal({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // ── Fit on resize ────────────────────────────────────────────────────────
     useEffect(() => {
         if (!containerRef.current || !fitAddonRef.current) return;
         const ro = new ResizeObserver(() => fitAddonRef.current?.fit());
@@ -168,7 +156,6 @@ export function Terminal({
         return () => ro.disconnect();
     }, []);
 
-    // ── Stream new sessionOutput lines into xterm ────────────────────────────
     useEffect(() => {
         const term = xtermRef.current;
         if (!term) return;
@@ -180,7 +167,6 @@ export function Terminal({
         lastOutputLen.current = sessionOutput.length;
     }, [sessionOutput]);
 
-    // ── Session status transitions ───────────────────────────────────────────
     const prevStatusRef = useRef<string | null>(null);
     useEffect(() => {
         const term = xtermRef.current;
@@ -210,7 +196,6 @@ export function Terminal({
     if (variant === 'panel') {
         return (
             <div className="h-full flex flex-col bg-zinc-950 border-t border-zinc-800">
-                {/* Header */}
                 <div className="flex items-center justify-between px-3 py-1.5 border-b border-zinc-800/80 bg-zinc-950 shrink-0">
                     <div className="flex items-center gap-2.5">
                         <TerminalIcon className="w-3.5 h-3.5 text-zinc-400" />
@@ -286,7 +271,6 @@ export function Terminal({
                     </div>
                 </div>
 
-                {/* Debug panel or xterm container */}
                 {debugMode && sessionId ? (
                     <DebugPanel
                         sessionId={sessionId}
@@ -295,7 +279,6 @@ export function Terminal({
                     />
                 ) : (
                     <>
-                        {/* Repair banner */}
                         {repairStatus && repairStatus !== 'completed' && repairStatus !== 'failed' && (
                             <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border-b border-amber-500/30 text-amber-300 text-[11px] font-mono shrink-0">
                                 <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
@@ -325,15 +308,12 @@ export function Terminal({
         );
     }
 
-    // Floating variant
     if (!isOpen) return null;
 
     return (
         <div className="fixed bottom-16 right-4 w-[640px] h-96 flex flex-col bg-zinc-950 border border-zinc-800 rounded-lg shadow-2xl shadow-black/60 z-50 overflow-hidden">
-            {/* Traffic-light header */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800 bg-zinc-900/80 shrink-0">
                 <div className="flex items-center gap-2">
-                    {/* macOS dots */}
                     <div className="flex items-center gap-1.5 mr-1">
                         <button onClick={onClose} className="w-3 h-3 rounded-full bg-red-500 hover:bg-red-400 transition-colors" />
                         <span className="w-3 h-3 rounded-full bg-zinc-600" />
@@ -357,6 +337,3 @@ export function Terminal({
         </div>
     );
 }
-
-// Re-export unused named imports from old API so existing call sites don't break
-export { Zap as _unused1 };

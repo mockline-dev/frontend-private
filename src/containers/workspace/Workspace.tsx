@@ -1,6 +1,5 @@
 'use client';
 
-import { fetchFileContent } from '@/api/files/fetchFileContent';
 import { downloadProject } from '@/api/projects/downloadProject';
 import { createUpload } from '@/api/uploads/createUpload';
 import { patchUpload } from '@/api/uploads/patchUpload';
@@ -13,26 +12,17 @@ import { EditorPanel } from '@/containers/workspace/components/EditorPanel';
 import { WorkspaceHeader } from '@/containers/workspace/components/WorkspaceHeader';
 import { WorkspaceSidebar } from '@/containers/workspace/components/WorkspaceSidebar';
 import { WorkspaceStatusBar } from '@/containers/workspace/components/WorkspaceStatusBar';
+import { useWorkspaceFiles } from '@/containers/workspace/hooks/useWorkspaceFiles';
+import { useWorkspaceSession } from '@/containers/workspace/hooks/useWorkspaceSession';
 import { buildFileTree, flattenFileTree, getDisplayPath } from '@/containers/workspace/utils/fileTree';
 import { useFiles } from '@/hooks/useFiles';
 import { useOpenTabs } from '@/hooks/useOpenTabs';
 import { useProjectCreation } from '@/hooks/useProjectCreation';
 import { useProjects } from '@/hooks/useProjects';
-import { useProjectChannel, useRealtimeUpdates, useSocketEvent } from '@/hooks/useRealtimeUpdates';
+import { useProjectChannel } from '@/hooks/useRealtimeUpdates';
 import { useSessions } from '@/hooks/useSessions';
 import { useSnapshots } from '@/hooks/useSnapshots';
-import type {
-    Project,
-    ProjectFile,
-    RepairCompletedEvent,
-    RepairFailedEvent,
-    RepairProgressEvent,
-    RepairStartedEvent,
-    SandboxResultEvent,
-    TerminalPhase,
-    TerminalStderrEvent,
-    TerminalStdoutEvent
-} from '@/types/feathers';
+import type { Project, ProjectFile } from '@/types/feathers';
 import type { ActiveView, CursorPosition, SidebarView } from '@/types/workspace';
 import { clearSavedPrompt, getSavedPrompt } from '@/utils/promptStorage';
 import { Terminal as TerminalIcon } from 'lucide-react';
@@ -56,32 +46,17 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
 
     const [projectName, setProjectName] = useState('New Project');
     const [currentProjectId, setCurrentProjectId] = useState<string | undefined>(initialProjectId || initialProject?._id);
-    const [selectedFile, setSelectedFile] = useState<string | null>(null);
-    const [selectedFileContent, setSelectedFileContent] = useState<string>('');
     const [sidebarView, setSidebarView] = useState<SidebarView>('files');
     const [activeView, setActiveView] = useState<ActiveView>('code');
     const [isTerminalOpen, setIsTerminalOpen] = useState(false);
-    const [isRunning, setIsRunning] = useState(false);
-    const [isBackendReady, setIsBackendReady] = useState(false);
-    const [terminalOutput, setTerminalOutput] = useState<string[]>([]);
-    const [repairStatus, setRepairStatus] = useState<'analyzing' | 'applying' | 'completed' | 'failed' | null>(null);
-    const [repairAttempt, setRepairAttempt] = useState(0);
-    const [repairMaxAttempts, setRepairMaxAttempts] = useState(0);
     const [isSnapshotCreating, setIsSnapshotCreating] = useState(false);
     const [snapshotActionId, setSnapshotActionId] = useState<string | null>(null);
-    const [loadingContent, setLoadingContent] = useState(false);
     const [cursorPosition, setCursorPosition] = useState<CursorPosition | undefined>(undefined);
     const [isDownloading, setIsDownloading] = useState(false);
-    const [quickOpenOpen, setQuickOpenOpen] = useState(false);
-    const [recentFiles, setRecentFiles] = useState<string[]>([]);
 
     const { tabs, activeTabId, openTab, closeTab, setActiveTab, markDirty, markClean, hasUnsavedChanges } = useOpenTabs();
 
     const creationTriggeredRef = useRef(false);
-    const lastPhaseRef = useRef<TerminalPhase | null>(null);
-    const errorWrittenRef = useRef<string | null>(null); // session _id for which error was written
-    const repairWrittenRef = useRef<string | null>(null); // session _id+status key for which repairing msg was written
-    const currentSessionRef = useRef<typeof currentSession>(null);
 
     const {
         state: creationState,
@@ -106,9 +81,18 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     const { snapshots, loading: snapshotsLoading, createSnapshot, rollbackToSnapshot, deleteSnapshot, refresh: refreshSnapshots } = useSnapshots([]);
     const { currentSession, isSessionRunning, sessionProxyUrl, sessionEndpointHeaders, createSession, stopSession, loadSessions } = useSessions();
 
-    useEffect(() => {
-        currentSessionRef.current = currentSession;
-    }, [currentSession]);
+    const { isRunning, setIsRunning, isBackendReady, setIsBackendReady, terminalOutput, repairStatus, repairAttempt, repairMaxAttempts, resetForNewRun } = useWorkspaceSession({
+        currentSession,
+        isSessionRunning,
+        currentProjectId,
+        setIsTerminalOpen,
+    });
+
+    const { selectedFile, setSelectedFile, selectedFileContent, setSelectedFileContent, loadingContent, recentFiles, quickOpenOpen, setQuickOpenOpen, handleFileSelect } = useWorkspaceFiles({
+        files,
+        setCurrentFile,
+        openTab,
+    });
 
     useProjectChannel(currentProjectId || null);
 
@@ -117,147 +101,12 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     }, [currentProjectId, loadProject, isBrowser]);
 
     useEffect(() => {
-        setIsBackendReady(false);
-        setTerminalOutput([]);
         setActiveView((v) => (v === 'api' ? 'code' : v));
-        lastPhaseRef.current = null;
-        errorWrittenRef.current = null;
     }, [currentProjectId]);
 
     useEffect(() => {
         if (currentProjectId && isBrowser) loadSessions(currentProjectId);
     }, [currentProjectId, loadSessions, isBrowser]);
-
-    // Sync session running state with isBackendReady
-    useEffect(() => {
-        setIsBackendReady(isSessionRunning);
-        if (isSessionRunning) {
-            setIsRunning(false);
-            setIsTerminalOpen(true);
-            errorWrittenRef.current = null;
-            repairWrittenRef.current = null;
-            toast.success('Backend session started');
-        }
-        if (currentSession?.status === 'repairing') {
-            const msg = currentSession.errorMessage ?? 'Auto-repair in progress…';
-            // Include errorMessage in key so each attempt (attempt 1/5, 2/5…) shows separately
-            const repairKey = `${currentSession._id}:repairing:${msg}`;
-            if (repairWrittenRef.current !== repairKey) {
-                repairWrittenRef.current = repairKey;
-                setTerminalOutput((prev) => [...prev, `\x1b[33m\x1b[1m⟳ REPAIRING\x1b[0m  ${msg}`]);
-            }
-        }
-        if (currentSession?.status === 'error' && errorWrittenRef.current !== currentSession._id) {
-            errorWrittenRef.current = currentSession._id;
-            setIsRunning(false);
-            toast.error(currentSession.errorMessage || 'Session failed to start');
-            // Write structured error details to terminal
-            const details: string[] = [];
-            if (currentSession.errorMessage) {
-                details.push(`\x1b[91m\x1b[1m✖ ${currentSession.errorMessage}\x1b[0m`);
-            }
-            if (currentSession.serverLog?.trim()) {
-                details.push(`\x1b[90m${'─'.repeat(50)}\x1b[0m`);
-                details.push(`\x1b[90m\x1b[1m── Server Log\x1b[0m`);
-                for (const line of currentSession.serverLog.split('\n')) {
-                    if (line.trim()) details.push(`\x1b[31m${line}\x1b[0m`);
-                }
-            }
-            if (details.length > 0) {
-                setTerminalOutput((prev) => [...prev, ...details]);
-            }
-        }
-    }, [isSessionRunning, currentSession?.status, currentSession?.errorMessage, currentSession?._id, currentSession?.serverLog]);
-
-    // Listen for sandbox results to display in terminal
-    useSocketEvent<SandboxResultEvent>('sandbox:result', (event) => {
-        // payload has no projectId — scoped to joined project channel
-        const ts = new Date().toLocaleTimeString('en-US', { hour12: false });
-        const status = event.success ? '\x1b[92m✔ Sandbox passed\x1b[0m' : '\x1b[91m✖ Sandbox failed\x1b[0m';
-        const lines = [
-            `\x1b[90m[${ts}]\x1b[0m ${status}${event.durationMs !== undefined ? `  \x1b[90m(${event.durationMs}ms)\x1b[0m` : ''}`,
-            ...(event.compilationOutput ? event.compilationOutput.split('\n').map((l) => `  ${l}`) : []),
-            ...(event.testOutput ? event.testOutput.split('\n').map((l) => `  ${l}`) : [])
-        ];
-        setTerminalOutput((prev) => [...prev, ...lines]);
-    });
-
-    // Listen for real-time terminal output from backend execution phases
-    // Uses useRealtimeUpdates (Feathers service layer) because the backend emits these
-    // as sessions service custom events, which arrive on the wire as "sessions terminal:stdout".
-    // useSocketEvent('terminal:stdout') would listen for a raw socket event that never fires.
-    const PHASE_HEADERS: Record<TerminalPhase, string> = {
-        deps: '\x1b[33m\x1b[1m── Installing dependencies…\x1b[0m',
-        start: '\x1b[36m\x1b[1m── Starting server…\x1b[0m',
-        server: '\x1b[97m\x1b[1m── Server output\x1b[0m',
-        repair: '\x1b[33m\x1b[1m── Auto-repair\x1b[0m'
-    };
-
-    useRealtimeUpdates<TerminalStdoutEvent>('sessions', 'terminal:stdout', (event) => {
-        if (!event || !currentSessionRef.current || event.sessionId !== currentSessionRef.current._id) return;
-        const raw: string = event.text ?? (event as any).data ?? '';
-        const phase = event.phase;
-        if (!phase) return;
-        const lines: string[] = [];
-        if (phase !== lastPhaseRef.current) {
-            lastPhaseRef.current = phase;
-            lines.push(PHASE_HEADERS[phase]);
-        }
-        const shouldApplyPhaseColor = phase !== 'repair' && phase !== 'server';
-        const phaseColor = phase === 'deps' ? '\x1b[33m' : phase === 'start' ? '\x1b[36m' : '\x1b[97m';
-        const rawLines = raw
-            .split('\n')
-            .filter(Boolean)
-            .map((l) => (shouldApplyPhaseColor ? `${phaseColor}${l}\x1b[0m` : l));
-        setTerminalOutput((prev) => [...prev, ...lines, ...rawLines]);
-    });
-
-    useRealtimeUpdates<TerminalStderrEvent>('sessions', 'terminal:stderr', (event) => {
-        if (!event || !currentSessionRef.current || event.sessionId !== currentSessionRef.current._id) return;
-        const raw: string = event.text ?? (event as any).data ?? '';
-        const phase = event.phase;
-        if (raw.includes('Missing modules (not installed):')) {
-            toast.error(raw.trim(), { duration: 8000 });
-        }
-        const lines: string[] = [];
-        if (phase && phase !== lastPhaseRef.current) {
-            lastPhaseRef.current = phase;
-            lines.push(PHASE_HEADERS[phase]);
-        }
-        const rawLines = raw
-            .split('\n')
-            .filter(Boolean)
-            .map((l) => `\x1b[91m${l}\x1b[0m`);
-        setTerminalOutput((prev) => [...prev, ...lines, ...rawLines]);
-    });
-
-    useRealtimeUpdates<RepairStartedEvent>('sessions', 'repair:started', (event) => {
-        if (!event || !currentSessionRef.current || event.sessionId !== currentSessionRef.current._id) return;
-        setRepairStatus('analyzing');
-        setRepairAttempt(event.attempt);
-        setRepairMaxAttempts(event.maxAttempts);
-    });
-
-    useRealtimeUpdates<RepairProgressEvent>('sessions', 'repair:progress', (event) => {
-        if (!event || !currentSessionRef.current || event.sessionId !== currentSessionRef.current._id) return;
-        setRepairStatus(event.phase);
-        setRepairAttempt(event.attempt);
-        setRepairMaxAttempts(event.maxAttempts);
-    });
-
-    useRealtimeUpdates<RepairCompletedEvent>('sessions', 'repair:completed', (event) => {
-        if (!event || !currentSessionRef.current || event.sessionId !== currentSessionRef.current._id) return;
-        setRepairStatus('completed');
-        const secs = event.durationMs ? ` in ${(event.durationMs / 1000).toFixed(1)}s` : '';
-        setTerminalOutput((prev) => [...prev, `\x1b[92m\x1b[1m✔ Repair completed${secs}\x1b[0m`]);
-        setTimeout(() => setRepairStatus(null), 3000);
-    });
-
-    useRealtimeUpdates<RepairFailedEvent>('sessions', 'repair:failed', (event) => {
-        if (!event || !currentSessionRef.current || event.sessionId !== currentSessionRef.current._id) return;
-        setRepairStatus('failed');
-        setTerminalOutput((prev) => [...prev, `\x1b[91m\x1b[1m✖ Auto-repair failed: ${event.error}\x1b[0m`]);
-    });
 
     useEffect(() => {
         if (currentProjectId && isBrowser) loadFiles(currentProjectId);
@@ -276,7 +125,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
             const displayPath = getDisplayPath(currentFile);
             if (selectedFile !== displayPath) setSelectedFile(displayPath);
         }
-    }, [currentFile, selectedFile]);
+    }, [currentFile, selectedFile, setSelectedFile]);
 
     const handleCreateProject = useCallback(
         async (prompt: string) => {
@@ -339,38 +188,12 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         [currentProjectId, updateProject]
     );
 
-    const handleFileSelect = useCallback(
-        async (filePath: string) => {
-            setSelectedFile(filePath);
-            const fileName = filePath.split('/').pop() ?? filePath;
-            openTab({ id: filePath, filePath, fileName });
-            setRecentFiles((prev) => [filePath, ...prev.filter((p) => p !== filePath)].slice(0, 5));
-
-            const file = files.find((f) => getDisplayPath(f) === filePath || f.name === filePath);
-            if (file) {
-                setCurrentFile(file);
-                setLoadingContent(true);
-                try {
-                    const result = await fetchFileContent({ fileId: file._id });
-                    if (!result.success) throw new Error(result.error);
-                    setSelectedFileContent(result.content);
-                } catch (error) {
-                    console.error('Failed to load file content:', error);
-                    toast.error('Failed to load file content');
-                } finally {
-                    setLoadingContent(false);
-                }
-            }
-        },
-        [files, setCurrentFile, openTab]
-    );
-
     const handleContentChange = useCallback(
         (value: string | undefined) => {
             setSelectedFileContent(value || '');
             if (selectedFile) markDirty(selectedFile);
         },
-        [selectedFile, markDirty]
+        [selectedFile, markDirty, setSelectedFileContent]
     );
 
     const handleFilesChanged = useCallback(async () => {
@@ -381,9 +204,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     const handleSaveFile = useCallback(async () => {
         if (!currentProjectId || !currentFile) return;
         try {
-            // Step 1: Initiate multipart upload
             const initiated = await createUpload({ key: currentFile.key, contentType: 'text/plain' });
-            // Step 2: Upload single part (base64 encoded content)
             const contentBytes = new TextEncoder().encode(selectedFileContent);
             const base64 = btoa(String.fromCharCode(...contentBytes));
             const { ETag } = await patchUpload('upload', {
@@ -392,7 +213,6 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                 partNumber: 1,
                 content: base64 as unknown as Buffer
             });
-            // Step 3: Complete multipart upload
             await updateUpload('upload', {
                 key: currentFile.key,
                 uploadId: initiated.uploadId,
@@ -483,7 +303,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                 setSelectedFileContent('');
             }
         },
-        [closeTab, handleFileSelect]
+        [closeTab, handleFileSelect, setSelectedFile, setSelectedFileContent]
     );
 
     useEffect(() => {
@@ -517,7 +337,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
-    }, [handleSaveFile, isBrowser, activeTabId, handleTabClose]);
+    }, [handleSaveFile, isBrowser, activeTabId, handleTabClose, setQuickOpenOpen]);
 
     const handleDownload = useCallback(async () => {
         if (!currentProjectId) {
@@ -556,12 +376,10 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
 
         setIsRunning(true);
         setIsTerminalOpen(true);
-        lastPhaseRef.current = null;
-        errorWrittenRef.current = null;
+        resetForNewRun();
 
         try {
             if (currentSession?.status === 'running') {
-                // Stop existing session first
                 await stopSession(currentSession._id);
             }
 
@@ -570,13 +388,13 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
                 userId: currentUser.feathersId,
                 language: 'python'
             });
-            void session; // status transitions written by Terminal component via sessionStatus prop
+            void session;
         } catch (error) {
             console.error('[Workspace] Failed to start session:', error);
             toast.error('Failed to start backend session');
             setIsRunning(false);
         }
-    }, [currentProjectId, isRunning, currentSession, createSession, stopSession, currentUser.feathersId]);
+    }, [currentProjectId, isRunning, currentSession, createSession, stopSession, currentUser.feathersId, setIsRunning, resetForNewRun]);
 
     const handleStopBackend = useCallback(async () => {
         if (!currentSession) return;
@@ -587,12 +405,13 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         } catch {
             toast.error('Failed to stop session');
         }
-    }, [currentSession, stopSession]);
+    }, [currentSession, stopSession, setIsBackendReady]);
 
     const handleBackToDashboard = useCallback(() => {
         resetState();
         router.push('/dashboard');
     }, [resetState, router]);
+
     const handleRetry = useCallback(() => {
         resetState();
     }, [resetState]);
@@ -614,12 +433,22 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     const promptFromUrl = searchParams.get('prompt');
     const isWorkspaceLoading = !!currentProjectId && !currentProject && !isCreating;
 
-    if (!hasError && (isCreating || (promptFromUrl && creationState.status !== 'ready' && creationState.status !== 'idle'))) {
+    const isExternallyGenerating =
+        !isCreating &&
+        (currentProject?.status === 'generating' || currentProject?.status === 'initializing') &&
+        files.length === 0;
+
+    if (!hasError && (isCreating || isExternallyGenerating || (promptFromUrl && creationState.status !== 'ready' && creationState.status !== 'idle'))) {
+        const loaderStatus = isExternallyGenerating ? 'generating' : creationState.status;
+        const loaderProgress = isExternallyGenerating
+            ? (currentProject?.generationProgress ?? null)
+            : creationState.progress;
+        const loaderProject = isExternallyGenerating ? (currentProject ?? null) : creationState.project;
         return (
             <ProjectCreationLoader
-                status={creationState.status}
-                project={creationState.project}
-                progress={creationState.progress}
+                status={loaderStatus}
+                project={loaderProject}
+                progress={loaderProgress}
                 error={creationState.error}
                 onBackToDashboard={handleBackToDashboard}
                 {...(creationState.status === 'error' ? { onRetry: handleRetry } : {})}
@@ -669,7 +498,6 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     const fileTree = files.length > 0 ? buildFileTree(files) : [];
     const flatFiles = flattenFileTree(fileTree);
 
-    // Detect language for status bar
     const activeFileName = selectedFile?.split('/').pop() ?? '';
     const statusLanguage = activeFileName ? getLanguageFromFileName(activeFileName) : undefined;
 

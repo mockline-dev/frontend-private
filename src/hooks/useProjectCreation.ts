@@ -5,9 +5,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useProjects } from './useProjects';
 import { useProjectChannel, useRealtimeUpdates, useSocketEvent } from './useRealtimeUpdates';
 
-/**
- * Simplified state for project creation process.
- */
 export type ProjectCreationStatus = 'idle' | 'creating' | 'generating' | 'ready' | 'error';
 
 export interface ProjectCreationState {
@@ -19,49 +16,13 @@ export interface ProjectCreationState {
     sandboxSuccess: boolean | null;
 }
 
-/**
- * Return type for the simplified useProjectCreation hook.
- */
 export interface UseProjectCreationReturn {
-    /** Current state of the project creation process */
     state: ProjectCreationState;
-    /** Creates a new project with the provided data */
     createProject: (data: CreateProjectData) => Promise<Project | undefined>;
-    /** Resets the state to idle */
     resetState: () => void;
-    /** Whether a creation operation is in progress */
     isCreating: boolean;
 }
 
-/**
- * Simplified hook for managing project creation.
- *
- * This hook uses the new useProjects and useRealtimeUpdates hooks to:
- * - Create projects via the projects service
- * - Listen to real-time progress updates
- * - Join project channels for updates
- * - Handle loading, error, and success states properly
- *
- * @example
- * ```typescript
- * const { state, createProject, resetState, isCreating } = useProjectCreation({
- *   onSuccess: (project) => {
- *     console.log('Project created:', project.name)
- *   }
- * })
- *
- * // Create a project
- * await createProject({
- *   name: 'My Project',
- *   description: 'A test project',
- *   framework: 'fast-api',
- *   language: 'python'
- * })
- * ```
- *
- * @param options - Optional configuration for callbacks
- * @returns An object containing state, actions, and computed values
- */
 export function useProjectCreation(options?: { onSuccess?: (project: Project) => void; onError?: (error: string) => void }): UseProjectCreationReturn {
     const { createProject: createProjectService, error: projectError } = useProjects([], { disableRealtimeListeners: true });
 
@@ -77,13 +38,9 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
     const [enhancedPrompt, setEnhancedPrompt] = useState<string | null>(null);
     const [sandboxSuccess, setSandboxSuccess] = useState<boolean | null>(null);
 
-    // Ref so orchestration socket-event handlers can read current status without stale closure.
     const statusRef = useRef<ProjectCreationStatus>('idle');
     useEffect(() => { statusRef.current = status; }, [status]);
 
-    /**
-     * Creates a new project with the provided data.
-     */
     const createProject = useCallback(
         async (data: CreateProjectData): Promise<Project | undefined> => {
             if (typeof window === 'undefined') {
@@ -134,9 +91,6 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
         [status, createProjectService]
     );
 
-    /**
-     * Resets the state to idle.
-     */
     const resetState = useCallback(() => {
         setStatus('idle');
         setProject(null);
@@ -150,11 +104,9 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
         'projects',
         'patched',
         (updatedProject) => {
-            // Only process updates for our current project
             if (updatedProject._id === project?._id) {
                 setProject(updatedProject);
 
-                // Update progress if available
                 if (updatedProject.generationProgress) {
                     setProgress(updatedProject.generationProgress);
                 }
@@ -174,14 +126,11 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
 
     useProjectChannel(project?._id || null);
 
-    // New orchestration event handlers (payloads per backend alpha/e2e-generation-pipeline)
-    // Events arrive on the joined project channel — no projectId in most payloads
     const hasReceivedFirstTokenRef = useRef(false);
 
     useSocketEvent<OrchestrationStartedEvent>('orchestration:started', (event) => {
-        // Only react during active project creation — not for post-creation AI tasks
         if (statusRef.current !== 'creating' && statusRef.current !== 'generating') return;
-        if (event.projectId !== project?._id) return; // has projectId
+        if (event.projectId !== project?._id) return;
         hasReceivedFirstTokenRef.current = false;
         setStatus('generating');
         setProgress((prev) => ({
@@ -193,8 +142,6 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
 
     useSocketEvent('orchestration:intent', () => {
         if (statusRef.current !== 'creating' && statusRef.current !== 'generating') return;
-        // payload: { intent, confidence, entities } — no projectId
-        // Map to 'analyzing' stage regardless of intent string from backend
         setProgress((prev) => ({
             ...(prev ?? { filesGenerated: 0, totalFiles: 0 }),
             currentStage: 'analyzing',
@@ -241,7 +188,6 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
     });
 
     useSocketEvent<OrchestrationErrorEvent>('orchestration:error', (event) => {
-        // Only handle errors during active creation — post-creation errors shown in chat
         if (statusRef.current !== 'creating' && statusRef.current !== 'generating') return;
         setLocalError(event.error);
         setStatus('error');
@@ -250,7 +196,6 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
 
     useSocketEvent<SandboxResultEvent>('sandbox:result', (event) => {
         if (statusRef.current !== 'creating' && statusRef.current !== 'generating') return;
-        // payload: { success, syntaxValid, compilationOutput, testOutput?, durationMs } — no projectId
         setSandboxSuccess(event.success);
         setProgress((prev) => ({
             ...(prev ?? { filesGenerated: 0, totalFiles: 0 }),
@@ -261,7 +206,6 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
 
     useSocketEvent<FilesPersistedEvent>('files:persisted', (event) => {
         if (statusRef.current !== 'creating' && statusRef.current !== 'generating') return;
-        // payload: { fileIds, snapshotId, uploadedCount, filePaths } — no projectId
         setProgress((prev) => ({
             ...(prev ?? { filesGenerated: 0, totalFiles: 0 }),
             currentStage: 'finalizing',
@@ -272,7 +216,7 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
 
     useSocketEvent<IndexingCompletedEvent>('indexing:completed', (event) => {
         if (statusRef.current !== 'creating' && statusRef.current !== 'generating') return;
-        if (event.projectId !== project?._id) return; // has projectId
+        if (event.projectId !== project?._id) return;
         setProgress((prev) => ({
             ...(prev ?? { filesGenerated: 0, totalFiles: 0 }),
             currentStage: 'finalizing',
@@ -281,11 +225,10 @@ export function useProjectCreation(options?: { onSuccess?: (project: Project) =>
     });
 
     useSocketEvent<IndexingErrorEvent>('indexing:error', (event) => {
-        if (event.projectId !== project?._id) return; // has projectId
+        if (event.projectId !== project?._id) return;
         console.warn('[useProjectCreation] Indexing error:', event.error);
     });
 
-    // Computed values
     const isCreating = status === 'creating' || status === 'generating';
 
     return {

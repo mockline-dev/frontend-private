@@ -184,11 +184,16 @@ export interface MessageMetadata {
     autoFixed?: boolean;         // true if sandbox fix loop was applied
     fixAttempts?: number;        // number of fix iterations applied
     // System message type — drives chat panel styling
-    type?: 'repair-start' | 'repair-progress' | 'repair-success' | 'repair-error';
+    type?: 'repair-start' | 'repair-progress' | 'repair-success' | 'repair-error' | 'repair-assistant';
     phase?: string;
     status?: string;
     repairAttempt?: number;
     repairMaxAttempts?: number;
+    // File change details from repair (populated after changedFiles computed)
+    changedFiles?: string[];
+    newFiles?: string[];
+    modifiedFiles?: string[];
+    durationSec?: string;
     [key: string]: unknown;
 }
 

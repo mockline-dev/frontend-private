@@ -8,7 +8,7 @@ export interface UpdateProjectParams {
     data: Record<string, unknown>;
 }
 
-export type UpdateProjectResponse = { success: true; data: any } | { success: false; error: string };
+export type UpdateProjectResponse = { success: true; data: unknown } | { success: false; error: string };
 
 export const updateProject = async (params: UpdateProjectParams): Promise<UpdateProjectResponse> => {
     try {

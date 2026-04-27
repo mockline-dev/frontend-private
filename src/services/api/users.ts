@@ -17,7 +17,7 @@ export const usersService = {
     async find(query?: UserQuery): Promise<{ data: User[]; total: number; limit: number; skip: number }> {
         const result = await fetchUsers(query ? { query: query as Record<string, unknown> } : undefined);
         if (!result.success) throw new Error(result.error);
-        const raw = result.data;
+        const raw = result.data as { data: User[]; total?: number; limit?: number; skip?: number } | User[];
         if (Array.isArray(raw)) {
             return { data: raw as User[], total: raw.length, limit: raw.length, skip: 0 };
         }

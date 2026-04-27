@@ -33,6 +33,7 @@ export function useProgressStream(options: UseProgressStreamOptions) {
                 wsRef.current.close();
                 wsRef.current = null;
             }
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setIsConnected(false);
             return;
         }
@@ -131,7 +132,7 @@ export function useProgressStream(options: UseProgressStreamOptions) {
 
 // Simulated progress stream for development/testing
 export function useSimulatedProgressStream(options: UseProgressStreamOptions & { duration?: number }) {
-    const { enabled, onProgress, onComplete, onError, duration = 30000 } = options;
+    const { enabled, onProgress, onComplete, duration = 30000 } = options;
     const [isConnected, setIsConnected] = useState(false);
     const [currentProgress, setCurrentProgress] = useState<ProgressUpdate | null>(null);
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -141,6 +142,7 @@ export function useSimulatedProgressStream(options: UseProgressStreamOptions & {
             if (intervalRef.current) {
                 clearInterval(intervalRef.current);
             }
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setIsConnected(false);
             return;
         }
@@ -160,7 +162,7 @@ export function useSimulatedProgressStream(options: UseProgressStreamOptions & {
             }
 
             const update: ProgressUpdate = {
-                stage: stages[currentStageIndex],
+                stage: stages[currentStageIndex]!,
                 percentage: Math.min(progress, 100),
                 message: `Processing... ${Math.round(progress)}%`,
                 timestamp: Date.now()

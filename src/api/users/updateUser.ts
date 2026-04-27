@@ -8,7 +8,7 @@ export interface UpdateUserParams {
     data: Record<string, unknown>;
 }
 
-export type UpdateUserResponse = { success: true; data: any } | { success: false; error: string };
+export type UpdateUserResponse = { success: true; data: unknown } | { success: false; error: string };
 
 export const updateUser = async (params: UpdateUserParams): Promise<UpdateUserResponse> => {
     try {

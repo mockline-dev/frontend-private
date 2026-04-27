@@ -83,7 +83,7 @@ export function MonacoEditor({
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  const handleEditorDidMount = (editor: editor.IStandaloneCodeEditor, monaco: Record<string, unknown>) => {
+  const handleEditorDidMount = (editor: editor.IStandaloneCodeEditor) => {
     editorRef.current = editor
 
     // Configure editor options

@@ -52,6 +52,7 @@ export function useRequestCollection(groups: EndpointGroup[], baseUrl: string): 
         if (groups.length > 0 && !selectedEndpoint) {
             const first = groups[0]?.endpoints[0];
             if (first) {
+                // eslint-disable-next-line react-hooks/set-state-in-effect
                 setSelectedEndpoint(first);
                 setRequestState((prev) => ({
                     ...prev,

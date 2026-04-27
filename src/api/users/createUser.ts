@@ -7,10 +7,10 @@ export interface CreateUserParams {
     email: string;
     password: string;
     name?: string;
-    [key: string]: any;
+    [key: string]: unknown;
 }
 
-export type CreateUserResponse = { success: true; data: any } | { success: false; error: string };
+export type CreateUserResponse = { success: true; data: unknown } | { success: false; error: string };
 
 export const createUser = async (params: CreateUserParams): Promise<CreateUserResponse> => {
     try {

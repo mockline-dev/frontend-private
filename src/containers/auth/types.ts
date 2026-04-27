@@ -1,4 +1,4 @@
-import { UserInfo } from '@firebase/auth-types'
+import type { UserInfo } from 'firebase/auth'
 
 export interface InitialData {
   firstName: string

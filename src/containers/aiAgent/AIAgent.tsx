@@ -34,6 +34,8 @@ export function AiAgent({ projectId, onFilesChanged }: AIAgentProps) {
     const [expandedFilesId, setExpandedFilesId] = useState<string | null>(null);
     const isMobile = useIsMobile();
 
+    const lastMessageContent = messages[messages.length - 1]?.content;
+
     useEffect(() => {
         const container = messagesContainerRef.current;
         if (!container) return;
@@ -41,7 +43,7 @@ export function AiAgent({ projectId, onFilesChanged }: AIAgentProps) {
         if (isNearBottom || isStreaming) {
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         }
-    }, [messages.length, isStreaming, messages[messages.length - 1]?.content]);
+    }, [messages.length, isStreaming, lastMessageContent]);
 
     const scrollDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 

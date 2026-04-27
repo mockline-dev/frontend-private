@@ -22,7 +22,11 @@ export function UrlBar({ method, url, status, onMethodChange, onUrlChange, onSen
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-            isSending ? onCancel() : onSend();
+            if (isSending) {
+            onCancel();
+        } else {
+            onSend();
+        }
         }
     };
 

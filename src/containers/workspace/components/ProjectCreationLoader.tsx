@@ -4,7 +4,7 @@ import { GenerationProgress, Project } from '@/types/feathers';
 import { AnimatePresence, motion, Variants, useReducedMotion } from 'framer-motion';
 import { Activity, AlertCircle, ArrowLeft, CheckCircle2, Code2, Clock, Cpu, FileCode2, GitBranch, Layers, Loader2, RotateCcw, Terminal, Zap } from 'lucide-react';
 import Image from 'next/image';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 export interface ProjectCreationLoaderProps {
     status: 'idle' | 'creating' | 'generating' | 'ready' | 'error';
@@ -98,7 +98,10 @@ function FileSkeleton({ index, delay = 0 }: { index: number; delay?: number }) {
 function ContextMessage({ stage }: { stage: string }) {
     const [messageIndex, setMessageIndex] = useState(0);
     const prefersReducedMotion = useReducedMotion();
-    const messages = CONTEXT_MESSAGES[stage as keyof typeof CONTEXT_MESSAGES] || ['Processing...'];
+    const messages = useMemo(
+        () => CONTEXT_MESSAGES[stage as keyof typeof CONTEXT_MESSAGES] ?? ['Processing...'],
+        [stage]
+    );
 
     useEffect(() => {
         const interval = setInterval(() => {

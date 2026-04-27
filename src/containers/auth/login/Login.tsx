@@ -24,7 +24,7 @@ const sampleTestimonials: Testimonial[] = [
     }
 ];
 
-export function Login({ className, ...props }: React.ComponentProps<'div'>) {
+export function Login() {
     const { login, loginWithGoogle, loading, googleLoading, errors, data, updateData } = useLogin();
 
     return (

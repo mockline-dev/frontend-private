@@ -81,6 +81,7 @@ export function Dashboard({ currentUser, initialProjects = [] }: DashboardProps)
 
         return () => {
             if (typeof window === 'undefined') return;
+            // eslint-disable-next-line react-hooks/exhaustive-deps
             const joinedIds = joinedIdsRef.current;
             joinedIds.forEach((id) => leaveProject(id));
             joinedIds.clear();

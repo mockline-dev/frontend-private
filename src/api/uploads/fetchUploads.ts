@@ -7,7 +7,7 @@ export interface FetchUploadsParams {
     query?: Record<string, unknown>;
 }
 
-export type FetchUploadsResponse = { success: true; data: any } | { success: false; error: string };
+export type FetchUploadsResponse = { success: true; data: unknown } | { success: false; error: string };
 
 export const fetchUploads = async (params?: FetchUploadsParams): Promise<FetchUploadsResponse> => {
     try {

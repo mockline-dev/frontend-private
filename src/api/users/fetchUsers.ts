@@ -4,10 +4,10 @@ import { createFeathersServerClient } from '@/services/feathersServer';
 import { apiServices } from '../services';
 
 export interface FetchUsersParams {
-    query?: Record<string, any>;
+    query?: Record<string, unknown>;
 }
 
-export type FetchUsersResponse = { success: true; data: any } | { success: false; error: string };
+export type FetchUsersResponse = { success: true; data: unknown } | { success: false; error: string };
 
 export const fetchUsers = async (params?: FetchUsersParams): Promise<FetchUsersResponse> => {
     try {

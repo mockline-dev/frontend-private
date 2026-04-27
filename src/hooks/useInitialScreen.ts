@@ -31,7 +31,6 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
         state: creationState,
         createProject,
         isCreating,
-        resetState
     } = useProjectCreation({
         onError: (error) => {
             toast.error(error);

@@ -7,7 +7,7 @@ export interface FetchUserByIdParams {
     id: string;
 }
 
-export type FetchUserByIdResponse = { success: true; data: any } | { success: false; error: string };
+export type FetchUserByIdResponse = { success: true; data: unknown } | { success: false; error: string };
 
 export const fetchUserById = async (params: FetchUserByIdParams): Promise<FetchUserByIdResponse> => {
     try {

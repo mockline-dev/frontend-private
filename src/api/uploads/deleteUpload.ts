@@ -7,7 +7,7 @@ export interface DeleteUploadParams {
     id: string;
 }
 
-export type DeleteUploadResponse = { success: true; data: any } | { success: false; error: string };
+export type DeleteUploadResponse = { success: true; data: unknown } | { success: false; error: string };
 
 export const deleteUpload = async (params: DeleteUploadParams): Promise<DeleteUploadResponse> => {
     try {

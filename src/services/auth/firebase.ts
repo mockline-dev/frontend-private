@@ -11,6 +11,7 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 }
 
-const app = initializeApp(firebaseConfig)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const app = initializeApp(firebaseConfig as any)
 export const auth = getAuth(app)
 export const googleProvider = new GoogleAuthProvider()

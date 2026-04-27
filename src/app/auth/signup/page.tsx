@@ -5,6 +5,7 @@ export default function SignupPage() {
   return (
     <div className="grid min-h-svh lg:grid-cols-2">
       <div className="relative hidden lg:block">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/signup-hero.jpg"
           alt="Signup Hero Banner"

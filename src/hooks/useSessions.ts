@@ -138,6 +138,7 @@ export function useSessions(): UseSessionsReturn {
         }, 5000);
 
         return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentSession?._id, currentSession?.status, isBrowser]);
 
     const isSessionRunning = currentSession?.status === 'running';

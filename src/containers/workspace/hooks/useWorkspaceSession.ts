@@ -47,6 +47,7 @@ export function useWorkspaceSession({ currentSession, isSessionRunning, currentP
     }, [currentSession]);
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setIsBackendReady(false);
         setTerminalOutput([]);
         lastPhaseRef.current = null;
@@ -54,6 +55,7 @@ export function useWorkspaceSession({ currentSession, isSessionRunning, currentP
     }, [currentProjectId]);
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setIsBackendReady(isSessionRunning);
         if (isSessionRunning) {
             setIsRunning(false);
@@ -104,6 +106,7 @@ export function useWorkspaceSession({ currentSession, isSessionRunning, currentP
 
     useRealtimeUpdates<TerminalStdoutEvent>('sessions', 'terminal:stdout', (event) => {
         if (!event || !currentSessionRef.current || event.sessionId !== currentSessionRef.current._id) return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const raw: string = event.text ?? (event as any).data ?? '';
         const phase = event.phase;
         if (!phase) return;
@@ -123,6 +126,7 @@ export function useWorkspaceSession({ currentSession, isSessionRunning, currentP
 
     useRealtimeUpdates<TerminalStderrEvent>('sessions', 'terminal:stderr', (event) => {
         if (!event || !currentSessionRef.current || event.sessionId !== currentSessionRef.current._id) return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const raw: string = event.text ?? (event as any).data ?? '';
         const phase = event.phase;
         if (raw.includes('Missing modules (not installed):')) {

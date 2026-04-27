@@ -12,7 +12,7 @@ interface ResizablePanelGroupProps extends React.HTMLAttributes<HTMLDivElement> 
   direction?: "horizontal" | "vertical"
   id?: string
   autoSaveId?: string
-  storage?: any
+  storage?: unknown
 }
 
 function ResizablePanelGroup({
@@ -20,8 +20,10 @@ function ResizablePanelGroup({
   direction = "horizontal",
   ...props
 }: ResizablePanelGroupProps) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const Group = ResizablePrimitive.Group as React.FC<any>
   return (
-    <ResizablePrimitive.Group
+    <Group
       data-slot="resizable-panel-group"
       direction={direction}
       className={cn(
@@ -29,7 +31,7 @@ function ResizablePanelGroup({
         direction === "vertical" ? "flex-col" : "",
         className
       )}
-      {...props}
+      {...(props as React.HTMLAttributes<HTMLDivElement>)}
     />
   )
 }

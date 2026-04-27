@@ -438,14 +438,17 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         if (files.length > 0 && !hasEverHadFiles) setHasEverHadFiles(true);
     }, [files.length, hasEverHadFiles]);
 
-    // Track whether the workspace has fully initialized — prevents the loader from
-    // appearing during AI response cycles on an already-loaded workspace.
-    const hasWorkspaceInitialized = useRef(false);
+    // Becomes true once the project has reached 'ready' state at least once.
+    // Prevents the full-screen loader from showing during AI response cycles
+    // on an already-initialized workspace (where status temporarily goes back to 'generating').
+    const hasBeenReady = useRef(
+        initialProject?.status === 'ready' || (initialFiles?.length ?? 0) > 0
+    );
     useEffect(() => {
-        if (currentProject && currentProjectId) {
-            hasWorkspaceInitialized.current = true;
+        if (currentProject?.status === 'ready') {
+            hasBeenReady.current = true;
         }
-    }, [currentProject, currentProjectId]);
+    }, [currentProject?.status]);
 
     const hasError = creationState.status === 'error' || currentProject?.status === 'error';
     const promptFromUrl = searchParams.get('prompt');
@@ -453,12 +456,13 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
 
     const isExternallyGenerating =
         !isCreating &&
-        !hasWorkspaceInitialized.current &&
+        !hasBeenReady.current &&
         !hasEverHadFiles &&
+        !initialProject &&
         (currentProject?.status === 'generating' || currentProject?.status === 'initializing') &&
         files.length === 0;
 
-    if (!hasError && (isCreating || isExternallyGenerating || (promptFromUrl && creationState.status !== 'ready' && creationState.status !== 'idle'))) {
+    if (!hasError && (isCreating || isExternallyGenerating || (promptFromUrl && !currentProjectId && creationState.status !== 'ready'))) {
         const loaderStatus = isExternallyGenerating ? 'generating' : creationState.status;
         const loaderProgress = isExternallyGenerating
             ? (currentProject?.generationProgress ?? null)

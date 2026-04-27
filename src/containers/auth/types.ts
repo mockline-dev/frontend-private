@@ -1,5 +1,3 @@
-import type { UserInfo } from 'firebase/auth'
-
 export interface InitialData {
   firstName: string
   lastName: string
@@ -22,10 +20,19 @@ export interface RegisterData {
 
 export type CustomError = { message: string; code?: string }
 
+export interface UserMeta {
+  displayName: string | null
+  email: string | null
+  phoneNumber: string | null
+  photoURL: string | null
+  providerId: string
+  uid: string
+}
+
 export interface UserData {
   firstName?: string
   lastName?: string
   jwt?: string
   feathersId: string
-  userMeta?: UserInfo[]
+  userMeta?: UserMeta[]
 }

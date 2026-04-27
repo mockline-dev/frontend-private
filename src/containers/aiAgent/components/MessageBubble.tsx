@@ -1,6 +1,8 @@
 'use client';
 
-import { MarkdownMessage } from './MarkdownMessage';
+import dynamic from 'next/dynamic';
+
+const MarkdownMessage = dynamic(() => import('./MarkdownMessage').then((m) => ({ default: m.MarkdownMessage })), { ssr: false });
 import { Button } from '@/components/ui/button';
 import type { Message } from '@/types/feathers';
 import { CheckCircle2, ChevronDown, ChevronUp, Copy, FileCode, Loader2, RefreshCcw, Wrench, XCircle } from 'lucide-react';

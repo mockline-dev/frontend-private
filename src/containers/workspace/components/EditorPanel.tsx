@@ -1,15 +1,25 @@
 'use client';
 
-import { EditorTabs } from './EditorTabs';
-import { EmptyEditor } from './EmptyEditor';
-import { MonacoEditor } from './MonacoEditor';
+import dynamic from 'next/dynamic';
+import type { ActiveView, CursorPosition, EditorTab } from '@/types/workspace';
 import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { ApiTester } from '@/containers/workspace/components/ApiTester';
 import { Breadcrumbs } from '@/containers/workspace/components/Breadcrumbs';
-import { Terminal } from '@/containers/workspace/components/Terminal';
-import type { ActiveView, CursorPosition, EditorTab } from '@/types/workspace';
+import { EditorTabs } from './EditorTabs';
+import { EmptyEditor } from './EmptyEditor';
 import { Code2, Loader2, Play, Save, Square } from 'lucide-react';
+
+const MonacoEditor = dynamic(() => import('./MonacoEditor').then((m) => ({ default: m.MonacoEditor })), {
+    ssr: false,
+    loading: () => (
+        <div className="flex items-center justify-center h-full">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-zinc-900" />
+        </div>
+    ),
+});
+
+const Terminal = dynamic(() => import('./Terminal').then((m) => ({ default: m.Terminal })), { ssr: false });
 
 interface EditorPanelProps {
     activeView: ActiveView;

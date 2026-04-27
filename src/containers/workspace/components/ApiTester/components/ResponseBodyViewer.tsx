@@ -1,6 +1,8 @@
 'use client';
 
-import { MonacoEditor } from '../../MonacoEditor';
+import dynamic from 'next/dynamic';
+
+const MonacoEditor = dynamic(() => import('../../MonacoEditor').then((m) => ({ default: m.MonacoEditor })), { ssr: false });
 
 interface ResponseBodyViewerProps {
     body: string;

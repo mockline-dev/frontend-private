@@ -1,6 +1,6 @@
 'use server';
 
-import { projectsService } from '@/services/api/projects';
+import { fetchProjectById } from '@/api/projects/fetchProjectById';
 import { createFeathersServerClient } from '@/services/feathersServer';
 import JSZip from 'jszip';
 import { fetchFileContent } from '../files/fetchFileContent';
@@ -65,7 +65,7 @@ export const downloadProject = async ({ projectId }: DownloadProjectParams): Pro
             return { success: false, error: 'Unauthorized' };
         }
 
-        const project = await projectsService.get(projectId);
+        const project = await fetchProjectById({ id: projectId });
         if (!project) {
             return { success: false, error: 'Project not found' };
         }
@@ -102,8 +102,7 @@ export const downloadProject = async ({ projectId }: DownloadProjectParams): Pro
             };
         }
 
-        const zipBuffer = await zip.generateAsync({ type: 'arraybuffer' });
-        const zipBase64 = Buffer.from(zipBuffer).toString('base64');
+        const zipBase64 = await zip.generateAsync({ type: 'base64' });
         const filename = `${project.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.zip`;
 
         return { success: true, data: { zipBase64, filename } };

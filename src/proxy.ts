@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+export const runtime = 'edge';
 
 const protectedPaths = ['/dashboard', '/workspace'];
 const authPaths = ['/auth/login', '/auth/signup'];
@@ -31,9 +32,9 @@ export function proxy(request: NextRequest) {
     response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
     response.headers.set('X-XSS-Protection', '1; mode=block');
 
-    if (authPaths.some((path) => pathname.startsWith(path))) {
-        response.headers.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
-    }
+    // if (authPaths.some((path) => pathname.startsWith(path))) {
+    //     response.headers.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+    // }
 
     return response;
 }

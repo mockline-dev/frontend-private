@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 const protectedPaths = ['/dashboard', '/workspace'];
 const authPaths = ['/auth/login', '/auth/signup'];
 
-export function proxy(request: NextRequest) {
+export function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
     const jwt = request.cookies.get('jwt')?.value;
     const currentUser = request.cookies.get('currentUser')?.value;

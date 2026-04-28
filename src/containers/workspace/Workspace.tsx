@@ -19,7 +19,7 @@ import { useFiles } from '@/hooks/useFiles';
 import { useOpenTabs } from '@/hooks/useOpenTabs';
 import { useProjectCreation } from '@/hooks/useProjectCreation';
 import { useProjects } from '@/hooks/useProjects';
-import { useProjectChannel } from '@/hooks/useRealtimeUpdates';
+import { useProjectChannel, useSocketEvent } from '@/hooks/useRealtimeUpdates';
 import { useSessions } from '@/hooks/useSessions';
 import { useSnapshots } from '@/hooks/useSnapshots';
 import type { Project, ProjectFile } from '@/types/feathers';
@@ -95,6 +95,14 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
     });
 
     useProjectChannel(currentProjectId || null);
+
+    useSocketEvent<{ projectId: string; success: boolean }>('chat:completed', (event) => {
+        if (event.projectId !== currentProjectId) return;
+        if (currentProjectId) {
+            loadProject(currentProjectId);
+            loadFiles(currentProjectId);
+        }
+    });
 
     useEffect(() => {
         if (currentProjectId && isBrowser) loadProject(currentProjectId);

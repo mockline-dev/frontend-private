@@ -139,6 +139,6 @@ export function useInitialScreen(options?: UseInitialScreenOptions) {
         handleEnhancePrompt,
         handleSendPrompt,
         isCreating,
-        isPreprocessing: false
+        isPreprocessing: isCreating
     };
 }

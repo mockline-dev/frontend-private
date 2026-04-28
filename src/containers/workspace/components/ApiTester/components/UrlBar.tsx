@@ -49,7 +49,7 @@ export function UrlBar({ method, url, status, onMethodChange, onUrlChange, onSen
                 value={url}
                 onChange={(e) => onUrlChange(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="https://..."
+                placeholder="/endpoint/path"
                 className="h-8 text-xs font-mono flex-1 border-zinc-200"
             />
 

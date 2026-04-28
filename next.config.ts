@@ -40,10 +40,10 @@ const nextConfig: NextConfig = {
                               value: [
                                   "default-src 'self'",
                                   "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://apis.google.com https://accounts.google.com https://www.gstatic.com",
-                                  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-                                  "font-src 'self' https://fonts.gstatic.com",
+                                  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
+                                  "font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net",
                                   "img-src 'self' data: https: blob:",
-                                  `connect-src 'self' ws://localhost:* wss://localhost:* http://localhost:* https://localhost:* ${process.env.NEXT_PUBLIC_SOCKET_URL ?? ''} ${(process.env.NEXT_PUBLIC_SOCKET_URL ?? '').replace(/^https?:/, 'wss:').replace(/^http:/, 'ws:')} https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://accounts.google.com https://www.gstatic.com https://firebase.googleapis.com https://firestore.googleapis.com`,
+                                  `connect-src 'self' ws://localhost:* wss://localhost:* http://localhost:* https://localhost:* ${process.env.NEXT_PUBLIC_SOCKET_URL ?? ''} ${(process.env.NEXT_PUBLIC_SOCKET_URL ?? '').replace(/^https?:/, 'wss:').replace(/^http:/, 'ws:')} https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://accounts.google.com https://www.gstatic.com https://firebase.googleapis.com https://firestore.googleapis.com https://cdn.jsdelivr.net`,
                                   `frame-src 'self' https://${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}.firebaseapp.com https://accounts.google.com https://www.gstatic.com https://lh3.googleusercontent.com`,
                                   "worker-src 'self' blob:"
                               ].join('; ')

@@ -31,6 +31,19 @@ export function ApiTester({ sessionId, sessionProxyUrl, sessionEndpointHeaders, 
 
     const { response, status, error: requestError, sendRequest, cancelRequest } = useApiRequest(sessionEndpointHeaders);
 
+    // Display only the path in the URL bar, hiding the relay base URL
+    const displayUrl = baseUrl && requestState.url.startsWith(baseUrl)
+        ? requestState.url.slice(baseUrl.length) || '/'
+        : requestState.url;
+
+    const handleUrlChange = (input: string) => {
+        if (input.startsWith('http://') || input.startsWith('https://')) {
+            updateUrl(input);
+        } else {
+            updateUrl(`${baseUrl}${input.startsWith('/') ? input : `/${input}`}`);
+        }
+    };
+
     if (!isSessionRunning) {
         return <EmptyState onRunBackend={onRunBackend} isRunning={isRunning} />;
     }
@@ -61,10 +74,10 @@ export function ApiTester({ sessionId, sessionProxyUrl, sessionEndpointHeaders, 
         <div className="h-full flex flex-col overflow-hidden bg-white">
             <UrlBar
                 method={requestState.method}
-                url={requestState.url}
+                url={displayUrl}
                 status={status}
                 onMethodChange={updateMethod}
-                onUrlChange={updateUrl}
+                onUrlChange={handleUrlChange}
                 onSend={() => void sendRequest(requestState)}
                 onCancel={cancelRequest}
             />

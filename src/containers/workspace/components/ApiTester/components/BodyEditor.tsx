@@ -1,8 +1,10 @@
 'use client';
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { MonacoEditor } from '../../MonacoEditor';
+import dynamic from 'next/dynamic';
 import { DEFAULT_CONTENT_TYPES } from '../constants';
+
+const MonacoEditor = dynamic(() => import('../../MonacoEditor').then((m) => ({ default: m.MonacoEditor })), { ssr: false });
 
 interface BodyEditorProps {
     body: string;

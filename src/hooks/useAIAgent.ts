@@ -2,7 +2,7 @@
 
 import { createMessage as createMessageAction } from '@/api/messages/createMessage';
 import { fetchMessages } from '@/api/messages/fetchMessages';
-import { type Message, type OrchestrationCompletedEvent, type OrchestrationErrorEvent, type OrchestrationIntentEvent, type OrchestrationTokenEvent, type FilesPersistedEvent, type ProgressStageEvent, type RepairStartedEvent, type RepairCompletedEvent, type RepairFailedEvent } from '@/types/feathers';
+import { type Message, type OrchestrationCompletedEvent, type OrchestrationErrorEvent, type OrchestrationIntentEvent, type OrchestrationTokenEvent, type FilesPersistedEvent, type ProgressStageEvent, type SandboxRetryEvent, type SandboxResultEvent, type ChatCompletedEvent, type ChatErrorEvent } from '@/types/feathers';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useRealtimeUpdates, useSocketEvent } from './useRealtimeUpdates';
@@ -272,20 +272,37 @@ export function useAIAgent({
         onFilesChanged?.();
     });
 
-    useSocketEvent<RepairStartedEvent>('repair:started', (event) => {
+    useSocketEvent<ChatCompletedEvent>('chat:completed', (event) => {
+        if (event.projectId !== projectId) return;
+        // Safety net: clear streaming state in case `messages created` was missed
+        setIsStreaming(false);
+        setPipelineStage(null);
+        setPipelineProgress(0);
+        streamingContentRef.current = '';
+        setMessages((prev) => prev.filter((m) => m._id !== STREAMING_MESSAGE_ID));
+    });
+
+    useSocketEvent<ChatErrorEvent>('chat:error', (event) => {
+        if (event.projectId !== projectId) return;
+        toast.error(`Generation failed: ${event.error}`);
+        setIsStreaming(false);
+        setPipelineStage(null);
+        setPipelineProgress(0);
+        streamingContentRef.current = '';
+        setMessages((prev) => prev.filter((m) => m._id !== STREAMING_MESSAGE_ID));
+    });
+
+    useSocketEvent<SandboxRetryEvent>('sandbox:retry', (event) => {
         setIsRepairing(true);
-        const label = event.maxAttempts > 1 ? `${event.attempt}/${event.maxAttempts}` : null;
-        setRepairAttemptLabel(label);
+        setRepairAttemptLabel(`${event.attempt}`);
     });
 
-    useSocketEvent<RepairCompletedEvent>('repair:completed', () => {
+    useSocketEvent<SandboxResultEvent>('sandbox:result', (event) => {
         setIsRepairing(false);
         setRepairAttemptLabel(null);
-    });
-
-    useSocketEvent<RepairFailedEvent>('repair:failed', () => {
-        setIsRepairing(false);
-        setRepairAttemptLabel(null);
+        if (!event.success) {
+            setPipelineStage('Validation failed');
+        }
     });
 
     return {

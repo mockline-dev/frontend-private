@@ -4,8 +4,6 @@ import type { AIFile } from '@/services/api/files';
 import { createFeathersServerClient } from '@/services/feathersServer';
 import { clearAuthAndRedirect, getCurrentUser } from '@/services/getCurrentUser';
 
-export const runtime = 'edge';
-
 interface WorkspacePageProps {
     searchParams?: {
         projectId?: string;

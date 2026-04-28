@@ -1,8 +1,6 @@
 import { Signup } from '@/containers/auth/signup/SignUp';
 import Image from 'next/image';
 
-export const runtime = 'edge';
-
 export default function SignupPage() {
     return (
         <div className="grid min-h-svh lg:grid-cols-2">

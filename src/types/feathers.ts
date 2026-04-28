@@ -395,6 +395,22 @@ export interface FilesPersistedEvent {
     filePaths: string[];
 }
 
+/** Fired when a chat job completes successfully (preserveProjectStatus path) */
+export interface ChatCompletedEvent {
+    projectId: string;
+    intent: string;
+    messageId: string;
+    filesGenerated: number;
+    success: boolean;
+}
+
+/** Fired when a chat job fails (preserveProjectStatus path) */
+export interface ChatErrorEvent {
+    projectId: string;
+    error: string;
+    messageId: string;
+}
+
 /** Fired when indexing completes */
 export interface IndexingCompletedEvent {
     projectId: string;

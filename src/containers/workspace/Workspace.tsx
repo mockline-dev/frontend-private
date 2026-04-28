@@ -458,7 +458,7 @@ export function Workspace({ currentUser, initialProjectId, initialProject = null
         !isCreating &&
         !hasBeenReady.current &&
         !hasEverHadFiles &&
-        !initialProject &&
+        initialProject?.status !== 'ready' &&
         (currentProject?.status === 'generating' || currentProject?.status === 'initializing') &&
         files.length === 0;
 

@@ -7,6 +7,57 @@ function generateId(): string {
     return Math.random().toString(36).slice(2, 9);
 }
 
+interface _JsonSchemaProp {
+    type?: string;
+    example?: unknown;
+    default?: unknown;
+}
+interface _JsonSchema {
+    properties?: Record<string, _JsonSchemaProp>;
+    example?: unknown;
+}
+
+function seedBodyFromEndpoint(endpoint: EndpointDefinition): string {
+    const BODY_METHODS: HttpMethod[] = ['POST', 'PUT', 'PATCH'];
+    if (!BODY_METHODS.includes(endpoint.method)) return '';
+
+    const rb = endpoint.requestBody;
+    if (!rb?.content) return '';
+
+    const jsonEntry =
+        rb.content['application/json'] ??
+        rb.content['application/json; charset=utf-8'] ??
+        Object.values(rb.content)[0];
+    if (!jsonEntry) return '';
+
+    if (jsonEntry.example !== undefined) {
+        return JSON.stringify(jsonEntry.example, null, 2);
+    }
+
+    const schema = jsonEntry.schema as _JsonSchema | undefined;
+    if (!schema?.properties) return '';
+
+    const skeleton: Record<string, unknown> = {};
+    for (const [key, prop] of Object.entries(schema.properties)) {
+        if (prop.example !== undefined) {
+            skeleton[key] = prop.example;
+        } else if (prop.default !== undefined) {
+            skeleton[key] = prop.default;
+        } else {
+            switch (prop.type) {
+                case 'string':  skeleton[key] = ''; break;
+                case 'integer':
+                case 'number':  skeleton[key] = 0;  break;
+                case 'boolean': skeleton[key] = false; break;
+                case 'array':   skeleton[key] = [];  break;
+                case 'object':  skeleton[key] = {};  break;
+                default:        skeleton[key] = null;
+            }
+        }
+    }
+    return JSON.stringify(skeleton, null, 2);
+}
+
 function seedParamsFromEndpoint(endpoint: EndpointDefinition): KeyValuePair[] {
     return (endpoint.parameters ?? [])
         .filter((p) => p.in === 'query')
@@ -59,6 +110,7 @@ export function useRequestCollection(groups: EndpointGroup[], baseUrl: string): 
                     method: first.method,
                     url: `${baseUrl}${first.path}`,
                     params: seedParamsFromEndpoint(first),
+                    body: seedBodyFromEndpoint(first),
                 }));
             }
         }
@@ -71,7 +123,7 @@ export function useRequestCollection(groups: EndpointGroup[], baseUrl: string): 
             method: endpoint.method,
             url: `${base}${endpoint.path}`,
             params: seedParamsFromEndpoint(endpoint),
-            body: '',
+            body: seedBodyFromEndpoint(endpoint),
         }));
     }, []);
 

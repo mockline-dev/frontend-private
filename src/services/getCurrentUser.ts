@@ -8,7 +8,12 @@ import { redirect } from 'next/navigation'
 export const getCurrentUser = async (): Promise<UserData | undefined> => {
   const currentUser = (await cookies()).get('currentUser')?.value
 
-  return currentUser ? (JSON.parse(currentUser) as UserData) : undefined
+  if (!currentUser) return undefined
+  try {
+    return JSON.parse(currentUser) as UserData
+  } catch {
+    return undefined
+  }
 }
 
 

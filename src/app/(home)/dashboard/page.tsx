@@ -2,13 +2,11 @@ import { Dashboard } from '@/containers/dashboard/Dashboard';
 import { createFeathersServerClient } from '@/services/feathersServer';
 import { clearAuthAndRedirect, getCurrentUser } from '@/services/getCurrentUser';
 
-export const revalidate = 30; // ISR: revalidate every 30 seconds
-
 export default async function DashboardPage() {
     const currentUser = await getCurrentUser();
 
     if (!currentUser) {
-        clearAuthAndRedirect();
+        await clearAuthAndRedirect();
         return null;
     }
 

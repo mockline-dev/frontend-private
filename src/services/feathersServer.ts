@@ -42,7 +42,9 @@ export const createFeathersServerClient = async () => {
     // rest(url).fetch(fn) returns an initialize function that also carries a
     // .service(name) factory (undocumented in types, present at runtime).
     // We configure the app with it AND use it to register the custom 'stats' method.
-    const restConfigure = rest(process.env.NEXT_PUBLIC_SOCKET_URL).fetch(fetch);
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL;
+    if (!socketUrl) throw new Error('NEXT_PUBLIC_SOCKET_URL is not configured');
+    const restConfigure = rest(socketUrl).fetch(fetch);
     app.configure(restConfigure);
 
     // Register projects with custom 'stats' method so FeathersJS REST client

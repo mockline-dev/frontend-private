@@ -55,7 +55,8 @@ export function useOpenApiSpec(specUrl: string | undefined, endpointHeaders?: Re
 
         try {
             const token = await feathersClient.authentication.getAccessToken();
-            return token ? { Authorization: `Bearer ${token}` } : {};
+            const ngrokHeaders = url.includes('ngrok') ? { 'ngrok-skip-browser-warning': 'true' } : {};
+            return { ...ngrokHeaders, ...(token ? { Authorization: `Bearer ${token}` } : {}) };
         } catch {
             return {};
         }

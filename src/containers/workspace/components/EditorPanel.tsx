@@ -108,20 +108,23 @@ export function EditorPanel({
                                             <Square className="w-3 h-3 mr-1" />
                                             Stop
                                         </Button>
-                                    ) : (
-                                        <Button
-                                            onClick={onRunBackend}
-                                            disabled={!currentProjectId || isRunning}
-                                            size="sm"
-                                            className="h-7 text-xs bg-green-600 hover:bg-green-700"
-                                        >
-                                            {isRunning ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Play className="w-3 h-3 mr-1" />}
-                                            {isRunning ? 'Starting...' : 'Run Backend'}
-                                        </Button>
-                                    )}
+                                    ) : (() => {
+                                        const isPendingStart = isRunning || sessionStatus === 'starting' || sessionStatus === 'repairing';
+                                        return (
+                                            <Button
+                                                onClick={onRunBackend}
+                                                disabled={!currentProjectId || isPendingStart}
+                                                size="sm"
+                                                className="h-7 text-xs bg-green-600 hover:bg-green-700"
+                                            >
+                                                {isPendingStart ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Play className="w-3 h-3 mr-1" />}
+                                                {isPendingStart ? 'Starting...' : 'Run Backend'}
+                                            </Button>
+                                        );
+                                    })()}
                                 </div>
                             </div>
-                            <div className="flex-1 overflow-hidden bg-white">
+                            <div className="flex-1 overflow-hidden bg-[#1e1e1e]">
                                 {loadingContent ? (
                                     <div className="flex items-center justify-center h-full">
                                         <div className="text-center">
@@ -150,7 +153,7 @@ export function EditorPanel({
                             sessionEndpointHeaders={sessionEndpointHeaders ?? null}
                             isSessionRunning={isBackendReady}
                             onRunBackend={onRunBackend}
-                            isRunning={isRunning}
+                            isRunning={isRunning || sessionStatus === 'starting' || sessionStatus === 'repairing'}
                         />
                     )}
                 </div>

@@ -15,7 +15,7 @@ const nextConfig: NextConfig = {
 
     // Optimize package imports
     experimental: {
-        optimizePackageImports: ['lucide-react', '@monaco-editor/react']
+        optimizePackageImports: ['lucide-react']
     },
 
     // Security headers

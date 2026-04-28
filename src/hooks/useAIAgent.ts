@@ -28,6 +28,7 @@ export interface UseAIAgentReturn {
     messages: Message[];
     hasOlderMessages: boolean;
     isLoadingOlderMessages: boolean;
+    isInitialLoading: boolean;
     input: string;
     setInput: (value: string) => void;
     isLoading: boolean;
@@ -61,6 +62,7 @@ export function useAIAgent({
     const [messages, setMessages] = useState<Message[]>([]);
     const [hasOlderMessages, setHasOlderMessages] = useState(false);
     const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
+    const [isInitialLoading, setIsInitialLoading] = useState(!!projectId);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isStreaming, setIsStreaming] = useState(false);
@@ -79,6 +81,7 @@ export function useAIAgent({
         if (!projectId || initializedRef.current) return;
         initializedRef.current = true;
 
+        setIsInitialLoading(true);
         try {
             const result = await fetchMessages({
                 query: {
@@ -91,13 +94,16 @@ export function useAIAgent({
             const sorted = [...fetched].sort((a, b) => a.createdAt - b.createdAt);
             setMessages(sorted);
             setHasOlderMessages(fetched.length >= INITIAL_MESSAGES_LIMIT);
+            setIsInitialLoading(false);
         } catch (err) {
             console.error('[useAIAgent] Failed to load initial messages:', err);
+            setIsInitialLoading(false);
         }
     }, [projectId]);
 
     useEffect(() => {
         initializedRef.current = false;
+        setIsInitialLoading(!!projectId);
         void loadInitialMessages();
     }, [projectId, loadInitialMessages]);
 
@@ -309,6 +315,7 @@ export function useAIAgent({
         messages,
         hasOlderMessages,
         isLoadingOlderMessages,
+        isInitialLoading,
         input,
         setInput,
         isLoading,

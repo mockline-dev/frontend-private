@@ -56,6 +56,7 @@ export function useApiRequest(endpointHeaders?: Record<string, string> | null): 
                         } catch {
                             // Keep request flow; backend will return auth error if token is required.
                         }
+                        if (url.includes('ngrok')) fetchHeaders.set('ngrok-skip-browser-warning', 'true');
                     }
 
                     const res = await fetch(url, { ...init, headers: fetchHeaders, signal: controller.signal });

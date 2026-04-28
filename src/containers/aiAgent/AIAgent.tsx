@@ -25,7 +25,7 @@ const suggestedPrompts = [
 ];
 
 export function AiAgent({ projectId, onFilesChanged }: AIAgentProps) {
-    const { messages, hasOlderMessages, isLoadingOlderMessages, input, setInput, isLoading, isStreaming, pipelineStage, pipelineProgress, retryingMessageId, handleSubmit, retryMessage, loadOlderMessages, stopStream, isRepairing, repairAttemptLabel } =
+    const { messages, hasOlderMessages, isLoadingOlderMessages, isInitialLoading, input, setInput, isLoading, isStreaming, pipelineStage, pipelineProgress, retryingMessageId, handleSubmit, retryMessage, loadOlderMessages, stopStream, isRepairing, repairAttemptLabel } =
         useAIAgent({ ...(projectId ? { projectId } : {}), ...(onFilesChanged ? { onFilesChanged } : {}) });
 
     const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -97,6 +97,12 @@ export function AiAgent({ projectId, onFilesChanged }: AIAgentProps) {
                     <div className="flex items-center justify-center py-2" role="status">
                         <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-400" />
                         <span className="text-[11px] text-zinc-400 ml-2">Loading older messages…</span>
+                    </div>
+                )}
+
+                {isInitialLoading && messages.length === 0 && (
+                    <div className="flex items-center justify-center h-full" role="status">
+                        <Loader2 className="w-5 h-5 animate-spin text-zinc-400" />
                     </div>
                 )}
 
